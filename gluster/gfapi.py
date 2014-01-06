@@ -266,7 +266,7 @@ if __name__ == "__main__":
                 if isinstance(ofd,File):
                         return False, "old path working after rename"
                 nfd = vol.open(npath,os.O_RDWR)
-                if isinstance(nfd,File):
+                if not isinstance(nfd,File):
                         return False, "new path not working after rename"
                 return True, "rename worked"
 
@@ -323,7 +323,7 @@ if __name__ == "__main__":
                 if rc < 0:
                         return False, "rmdir error %d" % rc
                 sb = vol.lstat(mypath)
-                if not isinstance(sb,Stat):
+                if isinstance(sb,Stat):
                         return False, "dir still there after rmdir"
                 return True, "rmdir worked"
 
@@ -362,12 +362,12 @@ if __name__ == "__main__":
                 fd = vol.creat(mypath,os.O_WRONLY|os.O_EXCL,0644)
                 if not fd:
                         return False, "creat error"
-		rc = fd.fallocate(0, 0, 1024*1024)
+                rc = fd.fallocate(0, 0, 1024*1024)
                 if rc != 0:
                         return False, "fallocate error"
-		rc = fd.discard(4096, 4096)
-		if rc != 0:
-			return False, "discard error"
+                rc = fd.discard(4096, 4096)
+                if rc != 0:
+                    return False, "discard error"
                 return True, "fallocate/discard worked"
 
         test_list = (
