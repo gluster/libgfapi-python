@@ -99,7 +99,7 @@ class File(object):
         rbuf = ctypes.create_string_buffer(buflen)
         ret = api.glfs_read(self.fd, rbuf, buflen, flags)
         if ret > 0:
-            return rbuf.value[:rc]
+            return rbuf.value[:ret]
         elif ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -218,11 +218,10 @@ class Volume(object):
     def lstat(self, path):
         x = Stat()
         rc = api.glfs_lstat(self.fs, path, ctypes.byref(x))
-        if rc >= 0:
-            return x
-        else:
+        if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
+        return x
 
     def mkdir(self, path):
         ret = api.glfs_mkdir(self.fs, path)
