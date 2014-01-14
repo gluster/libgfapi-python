@@ -6,6 +6,8 @@ import os
 import sys
 import types
 
+from contextlib import contextmanager
+
 # Looks like ctypes is having trouble with dependencies, so just force them to
 # load with RTLD_GLOBAL until I figure that out.
 glfs = ctypes.CDLL(find_library("glusterfs"), ctypes.RTLD_GLOBAL,
@@ -66,27 +68,34 @@ api.glfs_readdir_r.restype = ctypes.c_int
 api.glfs_readdir_r.argtypes = [ctypes.c_void_p, ctypes.POINTER(Dirent),
                                ctypes.POINTER(ctypes.POINTER(Dirent))]
 
-# There's a bit of ctypes glitchiness around __del__ functions and module-level
-# variables.  If we unload the module while we still have references to File or
-# Volume objects, the module-level variables might have disappeared by the time
-# __del__ gets called.  Therefore the objects hold references which they
-# release when __del__ is done.  We only actually use the object-local values
-# in __del__; for clarity, we just use the simpler module-level form elsewhere.
-
 
 class File(object):
 
     def __init__(self, fd):
-        # Add a reference so the module-level variable "api" doesn't
-        # get yanked out from under us (see comment above File def'n).
-        self._api = api
         self.fd = fd
 
-    def __del__(self):
-        self._api.glfs_close(self.fd)
-        self._api = None
-
     # File operations, in alphabetical order.
+
+    def close(self):
+        ret = api.glfs_close(self.fd)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
+    def discard(self, offset, len):
+        ret = api.glfs_discard(self.fd, offset, len)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
+    def fallocate(self, mode, offset, len):
+        ret = api.glfs_fallocate(self.fd, mode, offset, len)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
 
     def fsync(self):
         ret = api.glfs_fsync(self.fd)
@@ -108,20 +117,6 @@ class File(object):
 
     def write(self, data, flags=0):
         ret = api.glfs_write(self.fd, data, len(data), flags)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
-        return ret
-
-    def fallocate(self, mode, offset, len):
-        ret = api.glfs_fallocate(self.fd, mode, offset, len)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
-        return ret
-
-    def discard(self, offset, len):
-        ret = api.glfs_discard(self.fd, offset, len)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -176,12 +171,19 @@ class Volume(object):
 
     # File operations, in alphabetical order.
 
+    @contextmanager
     def creat(self, path, flags, mode):
         fd = api.glfs_creat(self.fs, path, flags, mode)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return File(fd)
+
+        fileobj = None
+        try:
+            fileobj = File(fd)
+            yield fileobj
+        finally:
+            fileobj.close()
 
     def getxattr(self, path, key, maxlen):
         buf = ctypes.create_string_buffer(maxlen)
@@ -230,12 +232,19 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    @contextmanager
     def open(self, path, flags):
         fd = api.glfs_open(self.fs, path, flags)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return File(fd)
+
+        fileobj = None
+        try:
+            fileobj = File(fd)
+            yield fileobj
+        finally:
+            fileobj.close()
 
     def opendir(self, path):
         fd = api.glfs_opendir(self.fs, path)
@@ -276,27 +285,27 @@ if __name__ == "__main__":
 
     def test_create_write(vol, path, data):
         mypath = path + ".io"
-        fd = vol.creat(mypath, os.O_WRONLY | os.O_EXCL, 0644)
-        if not fd:
-            return False, "creat error"
-        rc = fd.write(data)
-        if rc != len(data):
-            return False, "wrote %d/%d bytes" % (rc, len(data))
-        return True, "wrote %d bytes" % rc
+        with vol.creat(mypath, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+            if not fd:
+                return False, "creat error"
+            rc = fd.write(data)
+            if rc != len(data):
+                return False, "wrote %d/%d bytes" % (rc, len(data))
+            return True, "wrote %d bytes" % rc
 
     # TBD: this test fails if we do create, open, write, read
     def test_open_read(vol, path, data):
         mypath = path + ".io"
-        fd = vol.open(mypath, os.O_RDONLY)
-        if not fd:
-            return False, "open error"
-        dlen = len(data) * 2
-        buf = fd.read(dlen)
-        if isinstance(buf, types.IntType):
-            return False, "read error %d" % buf
-        if len(buf) != len(data):
-            return False, "read %d/%d bytes" % (len(buf), len(data))
-        return True, "read '%s'" % buf
+        with vol.open(mypath, os.O_RDONLY) as fd:
+            if not fd:
+                return False, "open error"
+            dlen = len(data) * 2
+            buf = fd.read(dlen)
+            if isinstance(buf, types.IntType):
+                return False, "read error %d" % buf
+            if len(buf) != len(data):
+                return False, "read %d/%d bytes" % (len(buf), len(data))
+            return True, "read '%s'" % buf
 
     def test_lstat(vol, path, data):
         mypath = path + ".io"
@@ -315,16 +324,17 @@ if __name__ == "__main__":
         if rc < 0:
             return False, "rename error %d" % rc
         try:
-            vol.open(opath, os.O_RDWR)
+            with vol.open(opath, os.O_RDWR) as fd:
+                return False, "old path working (%s) after rename" % fd
         except OSError:
             pass
         else:
             return False, "old path working after rename"
 
-        nfd = vol.open(npath, os.O_RDWR)
-        if not isinstance(nfd, File):
-            return False, "new path not working after rename"
-        return True, "rename worked"
+        with vol.open(npath, os.O_RDWR) as nfd:
+            if not isinstance(nfd, File):
+                return False, "new path not working after rename"
+            return True, "rename worked"
 
     def test_unlink(vol, path, data):
         mypath = path + ".tmp"
@@ -333,7 +343,8 @@ if __name__ == "__main__":
             return False, "unlink error %d" % rc
 
         try:
-            vol.open(mypath, os.O_RDWR)
+            with vol.open(mypath, os.O_RDWR) as fd:
+                return False, "old path working (%s) after unlink" % fd
         except OSError:
             pass
         else:
@@ -351,10 +362,10 @@ if __name__ == "__main__":
 
     def test_create_in_dir(vol, path, data):
         mypath = path + ".dir/probe"
-        fd = vol.creat(mypath, os.O_RDWR, 0644)
-        if not isinstance(fd, File):
-            return False, "create (in dir) error"
-        return True, "create (in dir) worked"
+        with vol.creat(mypath, os.O_RDWR, 0644) as fd:
+            if not isinstance(fd, File):
+                return False, "create (in dir) error"
+            return True, "create (in dir) worked"
 
     def test_dir_listing(vol, path, data):
         mypath = path + ".dir"
@@ -394,9 +405,10 @@ if __name__ == "__main__":
 
     def test_setxattr(vol, path, data):
         mypath = path + ".xa"
-        fd = vol.creat(mypath, os.O_RDWR | os.O_EXCL, 0644)
-        if not fd:
-            return False, "creat (xattr test) error"
+        with vol.creat(mypath, os.O_RDWR | os.O_EXCL, 0644) as fd:
+            if not fd:
+                return False, "creat (xattr test) error"
+
         key1, key2 = "hello", "goodbye"
         if vol.setxattr(mypath, "trusted.key1", key1, len(key1)) < 0:
             return False, "setxattr (key1) error"
@@ -424,16 +436,16 @@ if __name__ == "__main__":
 
     def test_fallocate(vol, path, data):
         mypath = path + ".io"
-        fd = vol.creat(mypath, os.O_WRONLY | os.O_EXCL, 0644)
-        if not fd:
-            return False, "creat error"
-        rc = fd.fallocate(0, 0, 1024 * 1024)
-        if rc != 0:
-            return False, "fallocate error"
-        rc = fd.discard(4096, 4096)
-        if rc != 0:
-            return False, "discard error"
-        return True, "fallocate/discard worked"
+        with vol.creat(mypath, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+            if not fd:
+                return False, "creat error"
+            rc = fd.fallocate(0, 0, 1024 * 1024)
+            if rc != 0:
+                return False, "fallocate error"
+            rc = fd.discard(4096, 4096)
+            if rc != 0:
+                return False, "discard error"
+            return True, "fallocate/discard worked"
 
     test_list = (
         test_create_write,
