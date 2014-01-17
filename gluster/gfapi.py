@@ -10,9 +10,6 @@ from contextlib import contextmanager
 
 # Looks like ctypes is having trouble with dependencies, so just force them to
 # load with RTLD_GLOBAL until I figure that out.
-glfs = ctypes.CDLL(find_library("glusterfs"), ctypes.RTLD_GLOBAL,
-                   use_errno=True)
-xdr = ctypes.CDLL(find_library("gfxdr"), ctypes.RTLD_GLOBAL, use_errno=True)
 api = ctypes.CDLL(find_library("gfapi"), ctypes.RTLD_GLOBAL, use_errno=True)
 
 # Wow, the Linux kernel folks really play nasty games with this structure.  If
