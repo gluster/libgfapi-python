@@ -265,7 +265,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("gluster.gfapi.api.glfs_mkdir", mock_glfs_mkdir):
             vol = gfapi.Volume("localhost", "test")
-            ret = vol.mkdir("testdir")
+            ret = vol.mkdir("testdir", 0775)
             self.assertEquals(ret, 0)
 
     def test_mkdir_fail_exception(self):
@@ -274,7 +274,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("gluster.gfapi.api.glfs_mkdir", mock_glfs_mkdir):
             vol = gfapi.Volume("localhost", "test")
-            self.assertRaises(OSError, vol.mkdir, "testdir")
+            self.assertRaises(OSError, vol.mkdir, "testdir", 0775)
 
     def test_open_success(self):
         mock_glfs_open = Mock()

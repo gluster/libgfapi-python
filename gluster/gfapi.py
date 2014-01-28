@@ -218,8 +218,8 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return x
 
-    def mkdir(self, path):
-        ret = api.glfs_mkdir(self.fs, path)
+    def mkdir(self, path, mode):
+        ret = api.glfs_mkdir(self.fs, path, mode)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))

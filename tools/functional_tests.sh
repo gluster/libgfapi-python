@@ -54,7 +54,7 @@ done
 
 
 mkdir functional_tests > /dev/null 2>&1
-sudo_env nosetests -v --exe \
+nosetests -v --exe \
 	--with-xunit \
 	--xunit-file functional_tests/libgfapi-python.xml \
     --with-html-output \

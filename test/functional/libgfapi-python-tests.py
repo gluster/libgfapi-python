@@ -94,7 +94,7 @@ class DirOpsTest(unittest.TestCase):
     def setUp(self):
         self.data = loremipsum.get_sentence()
         self.dir_path = self._testMethodName + "_dir"
-        self.vol.mkdir(self.dir_path)
+        self.vol.mkdir(self.dir_path, 0755)
         self.file_path = self.dir_path + "/" + self.testfile
         with self.vol.creat(
                 self.file_path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
