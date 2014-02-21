@@ -101,15 +101,21 @@ class File(object):
         rbuf = ctypes.create_string_buffer(buflen)
         ret = api.glfs_read(self.fd, rbuf, buflen, flags)
         if ret > 0:
-            return rbuf.value[:ret]
+            return rbuf
         elif ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         else:
             return ret
 
-    def write(self, data, flags=0):
-        ret = api.glfs_write(self.fd, data, len(data), flags)
+    def write(self, data):
+        # creating a ctypes.c_ubyte buffer to handle converting bytearray
+        # to the required C data type
+        if type(data) is bytearray:
+            buf = (ctypes.c_ubyte * len(data)).from_buffer(data)
+        else:
+            buf = data
+        ret = api.glfs_write(self.fd, buf, len(buf))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))

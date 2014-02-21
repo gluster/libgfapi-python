@@ -56,7 +56,7 @@ class TestFile(unittest.TestCase):
         with patch("gluster.gfapi.api.glfs_read", _mock_glfs_read):
             fd = gfapi.File(2)
             b = fd.read(5)
-            self.assertEqual(b, "hello")
+            self.assertEqual(b.value, "hello")
 
     def test_read_fail_exception(self):
         mock_glfs_read = Mock()
@@ -83,6 +83,16 @@ class TestFile(unittest.TestCase):
             fd = gfapi.File(2)
             ret = fd.write("hello")
             self.assertEqual(ret, 5)
+
+    def test_write_binary_success(self):
+        mock_glfs_write = Mock()
+        mock_glfs_write.return_value = 3
+
+        with patch("gluster.gfapi.api.glfs_write", mock_glfs_write):
+            fd = gfapi.File(2)
+            b = bytearray(3)
+            ret = fd.write(b)
+            self.assertEqual(ret, 3)
 
     def test_write_fail_exception(self):
         mock_glfs_write = Mock()

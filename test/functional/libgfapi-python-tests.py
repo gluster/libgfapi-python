@@ -7,6 +7,36 @@ from nose import SkipTest
 from gluster import gfapi
 
 
+class BinFileOpsTest(unittest.TestCase):
+
+    vol = None
+    path = None
+    data = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.vol = gfapi.Volume("gfshost", "test")
+        cls.vol.set_logging("/dev/null", 7)
+        cls.vol.mount()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.vol = None
+
+    def setUp(self):
+        self.data = bytearray([(k % 128) for k in range(0, 1024)])
+        self.path = self._testMethodName + ".io"
+        with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+            fd.write(self.data)
+
+    def test_bin_open_and_read(self):
+        with self.vol.open(self.path, os.O_RDONLY) as fd:
+            self.assertTrue(isinstance(fd, gfapi.File))
+            buf = fd.read(len(self.data))
+            self.assertFalse(isinstance(buf, types.IntType))
+            self.assertEqual(buf, self.data)
+
+
 class FileOpsTest(unittest.TestCase):
 
     vol = None
@@ -27,7 +57,7 @@ class FileOpsTest(unittest.TestCase):
         self.data = loremipsum.get_sentence()
         self.path = self._testMethodName + ".io"
         with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
-            rc = fd.write(self.data)
+            fd.write(self.data)
 
     def tearDown(self):
         self.path = None
@@ -38,7 +68,7 @@ class FileOpsTest(unittest.TestCase):
             self.assertTrue(isinstance(fd, gfapi.File))
             buf = fd.read(len(self.data))
             self.assertFalse(isinstance(buf, types.IntType))
-            self.assertEqual(buf, self.data)
+            self.assertEqual(buf.value, self.data)
 
     def test_lstat(self):
         sb = self.vol.lstat(self.path)
