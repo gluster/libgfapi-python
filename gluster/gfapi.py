@@ -1,8 +1,12 @@
 import ctypes
 from ctypes.util import find_library
 import os
+import stat
 
 from contextlib import contextmanager
+
+# Disclaimer: many of the helper functions (e.g., exists, isdir) where copied
+# from the python source code
 
 # Looks like ctypes is having trouble with dependencies, so just force them to
 # load with RTLD_GLOBAL until I figure that out.
@@ -60,6 +64,9 @@ api.glfs_opendir.restype = ctypes.c_void_p
 api.glfs_readdir_r.restype = ctypes.c_int
 api.glfs_readdir_r.argtypes = [ctypes.c_void_p, ctypes.POINTER(Dirent),
                                ctypes.POINTER(ctypes.POINTER(Dirent))]
+api.glfs_stat.restype = ctypes.c_int
+api.glfs_stat.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
+                          ctypes.POINTER(Stat)]
 
 
 class File(object):
@@ -184,6 +191,23 @@ class Volume(object):
         finally:
             fileobj.close()
 
+    def exists(self, path):
+        """
+        Test whether a path exists.
+        Returns False for broken symbolic links.
+        """
+        try:
+            self.stat(path)
+        except OSError:
+            return False
+        return True
+
+    def getsize(self, filename):
+        """
+        Return the size of a file, reported by stat()
+        """
+        return self.stat(filename).st_size
+
     def getxattr(self, path, key, maxlen):
         buf = ctypes.create_string_buffer(maxlen)
         rc = api.glfs_getxattr(self.fs, path, key, buf, maxlen)
@@ -191,6 +215,36 @@ class Volume(object):
             err = ctypes.get_errno()
             raise IOError(err, os.strerror(err))
         return buf.value[:rc]
+
+    def isdir(self, path):
+        """
+        Test whether a path is an existing directory
+        """
+        try:
+            s = self.stat(path)
+        except OSError:
+            return False
+        return stat.S_ISDIR(s.st_mode)
+
+    def isfile(self, path):
+        """
+        Test whether a path is a regular file
+        """
+        try:
+            s = self.stat(path)
+        except OSError:
+            return False
+        return stat.S_ISREG(s.st_mode)
+
+    def islink(self, path):
+        """
+        Test whether a path is a symbolic link
+        """
+        try:
+            s = self.lstat(path)
+        except OSError:
+            return False
+        return stat.S_ISLNK(s.st_mode)
 
     def listxattr(self, path):
         buf = ctypes.create_string_buffer(512)
@@ -217,12 +271,12 @@ class Volume(object):
         return xattrs
 
     def lstat(self, path):
-        x = Stat()
-        rc = api.glfs_lstat(self.fs, path, ctypes.byref(x))
+        s = Stat()
+        rc = api.glfs_lstat(self.fs, path, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return x
+        return s
 
     def mkdir(self, path, mode):
         ret = api.glfs_mkdir(self.fs, path, mode)
@@ -252,6 +306,13 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return Dir(fd)
 
+    def removexattr(self, path, key):
+        ret = api.glfs_removexattr(self.fs, path, key)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise IOError(err, os.strerror(err))
+        return ret
+
     def rename(self, opath, npath):
         ret = api.glfs_rename(self.fs, opath, npath)
         if ret < 0:
@@ -271,6 +332,24 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise IOError(err, os.strerror(err))
+        return ret
+
+    def stat(self, path):
+        s = Stat()
+        rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
+        if rc < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return s
+
+    def symlink(self, source, link_name):
+        """
+        Create a symbolic link 'link_name' which points to 'source'
+        """
+        ret = api.glfs_symlink(self.fs, source, link_name)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
         return ret
 
     def unlink(self, path):

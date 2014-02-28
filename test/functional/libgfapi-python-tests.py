@@ -3,7 +3,6 @@ import os
 import types
 import loremipsum
 
-from nose import SkipTest
 from gluster import gfapi
 
 
@@ -57,7 +56,8 @@ class FileOpsTest(unittest.TestCase):
         self.data = loremipsum.get_sentence()
         self.path = self._testMethodName + ".io"
         with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
-            fd.write(self.data)
+            rc = fd.write(self.data)
+            self.assertEqual(rc, len(self.data))
 
     def tearDown(self):
         self.path = None
@@ -70,6 +70,37 @@ class FileOpsTest(unittest.TestCase):
             self.assertFalse(isinstance(buf, types.IntType))
             self.assertEqual(buf.value, self.data)
 
+    def test_exists(self):
+        e = self.vol.exists(self.path)
+        self.assertTrue(e)
+
+    def test_exists_false(self):
+        e = self.vol.exists("filedoesnotexist")
+        self.assertFalse(e)
+
+    def test_getsize(self):
+        size = self.vol.getsize(self.path)
+        self.assertEqual(size, len(self.data))
+
+    def test_isfile(self):
+        isfile = self.vol.isfile(self.path)
+        self.assertTrue(isfile)
+
+    def test_isdir_false(self):
+        isdir = self.vol.isdir(self.path)
+        self.assertFalse(isdir)
+
+    def test_symlink(self):
+        link = self._testMethodName + ".link"
+        ret = self.vol.symlink(self.path, link)
+        self.assertEqual(ret, 0)
+        islink = self.vol.islink(link)
+        self.assertTrue(islink)
+
+    def test_islink_false(self):
+        islink = self.vol.islink(self.path)
+        self.assertFalse(islink)
+
     def test_lstat(self):
         sb = self.vol.lstat(self.path)
         self.assertFalse(isinstance(sb, types.IntType))
@@ -81,6 +112,11 @@ class FileOpsTest(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertRaises(OSError, self.vol.lstat, self.path)
 
+    def test_stat(self):
+        sb = self.vol.stat(self.path)
+        self.assertFalse(isinstance(sb, types.IntType))
+        self.assertEqual(sb.st_size, len(self.data))
+
     def test_unlink(self):
         ret = self.vol.unlink(self.path)
         self.assertEqual(ret, 0)
@@ -89,9 +125,9 @@ class FileOpsTest(unittest.TestCase):
     def test_xattr(self):
         key1, key2 = "hello", "world"
         ret1 = self.vol.setxattr(self.path, "trusted.key1", key1, len(key1))
-        self.assertEqual(0, ret1)
+        self.assertEqual(ret1, 0)
         ret2 = self.vol.setxattr(self.path, "trusted.key2", key2, len(key2))
-        self.assertEqual(0, ret2)
+        self.assertEqual(ret2, 0)
 
         xattrs = self.vol.listxattr(self.path)
         self.assertFalse(isinstance(xattrs, types.IntType))
@@ -100,6 +136,13 @@ class FileOpsTest(unittest.TestCase):
         buf = self.vol.getxattr(self.path, "trusted.key1", 32)
         self.assertFalse(isinstance(buf, types.IntType))
         self.assertEqual(buf, "hello")
+
+        ret3 = self.vol.removexattr(self.path, "trusted.key1")
+        self.assertEqual(ret3, 0)
+
+        xattrs = self.vol.listxattr(self.path)
+        self.assertFalse(isinstance(xattrs, types.IntType))
+        self.assertEqual(xattrs, ["trusted.key2"])
 
 
 class DirOpsTest(unittest.TestCase):
@@ -129,11 +172,20 @@ class DirOpsTest(unittest.TestCase):
         with self.vol.creat(
                 self.file_path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
             rc = fd.write(self.data)
+            self.assertEqual(rc, len(self.data))
 
     def tearDown(self):
         self.dir_path = None
         self.file_path = None
         self.data = None
+
+    def test_isdir(self):
+        isdir = self.vol.isdir(self.dir_path)
+        self.assertTrue(isdir)
+
+    def test_isfile_false(self):
+        isfile = self.vol.isfile(self.dir_path)
+        self.assertFalse(isfile)
 
     def test_dir_listing(self):
         fd = self.vol.opendir(self.dir_path)

@@ -1,7 +1,7 @@
 import unittest
 import gluster
-import mock
 import os
+import stat
 
 from gluster import gfapi
 from nose import SkipTest
@@ -185,7 +185,7 @@ class TestVolume(unittest.TestCase):
     def tearDown(self):
         gluster.gfapi.api.glfs_new = self._saved_glfs_new
         gluster.gfapi.api.glfs_set_volfile_server = \
-                self._saved_glfs_set_volfile_server
+            self._saved_glfs_set_volfile_server
         gluster.gfapi.api.glfs_fini = self._saved_glfs_fini
         gluster.gfapi.api.glfs_close = self._saved_glfs_close
         gluster.gfapi.api.glfs_closedir = self._saved_glfs_closedir
@@ -210,10 +210,120 @@ class TestVolume(unittest.TestCase):
             with vol.creat("file.txt", os.O_WRONLY, 0644) as fd:
                 self.assertEqual(fd, None)
 
-
         with patch("gluster.gfapi.api.glfs_creat", mock_glfs_creat):
             vol = gfapi.Volume("localhost", "test")
             self.assertRaises(OSError, assert_creat)
+
+    def test_exists_true(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = 0
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.exists("file.txt")
+            self.assertTrue(ret)
+
+    def test_not_exists_false(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.exists("file.txt")
+            self.assertFalse(ret)
+
+    def test_isdir_true(self):
+        mock_glfs_stat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFDIR
+        mock_glfs_stat.return_value = s
+
+        with patch("gluster.gfapi.Volume.stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isdir("dir")
+            self.assertTrue(ret)
+
+    def test_isdir_false(self):
+        mock_glfs_stat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFREG
+        mock_glfs_stat.return_value = s
+
+        with patch("gluster.gfapi.Volume.stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isdir("file")
+            self.assertFalse(ret)
+
+    def test_isdir_false_nodir(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isdir("dirdoesnotexist")
+            self.assertFalse(ret)
+
+    def test_isfile_true(self):
+        mock_glfs_stat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFREG
+        mock_glfs_stat.return_value = s
+
+        with patch("gluster.gfapi.Volume.stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isfile("file")
+            self.assertTrue(ret)
+
+    def test_isfile_false(self):
+        mock_glfs_stat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFDIR
+        mock_glfs_stat.return_value = s
+
+        with patch("gluster.gfapi.Volume.stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isfile("dir")
+            self.assertFalse(ret)
+
+    def test_isfile_false_nofile(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.isfile("filedoesnotexist")
+            self.assertFalse(ret)
+
+    def test_islink_true(self):
+        mock_glfs_lstat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFLNK
+        mock_glfs_lstat.return_value = s
+
+        with patch("gluster.gfapi.Volume.lstat", mock_glfs_lstat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.islink("solnk")
+            self.assertTrue(ret)
+
+    def test_islink_false(self):
+        mock_glfs_lstat = Mock()
+        s = gfapi.Stat()
+        s.st_mode = stat.S_IFREG
+        mock_glfs_lstat.return_value = s
+
+        with patch("gluster.gfapi.Volume.lstat", mock_glfs_lstat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.islink("file")
+            self.assertFalse(ret)
+
+    def test_islink_false_nolink(self):
+        mock_glfs_lstat = Mock()
+        mock_glfs_lstat.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_lstat", mock_glfs_lstat):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.islink("linkdoesnotexist")
+            self.assertFalse(ret)
 
     def test_getxattr_success(self):
         def mock_glfs_getxattr(fs, path, key, buf, maxlen):
@@ -236,7 +346,7 @@ class TestVolume(unittest.TestCase):
     def test_listxattr_success(self):
         def mock_glfs_listxattr(fs, path, buf, buflen):
             buf.raw = "key1\0key2\0"
-            return  10
+            return 10
 
         with patch("gluster.gfapi.api.glfs_listxattr", mock_glfs_listxattr):
             vol = gfapi.Volume("localhost", "test")
@@ -269,6 +379,23 @@ class TestVolume(unittest.TestCase):
             vol = gfapi.Volume("localhost", "test")
             self.assertRaises(OSError, vol.lstat, "file.txt")
 
+    def test_stat_success(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = 0
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            stat = vol.stat("file.txt")
+            self.assertTrue(isinstance(stat, gfapi.Stat))
+
+    def test_stat_fail_exception(self):
+        mock_glfs_stat = Mock()
+        mock_glfs_stat.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_stat", mock_glfs_stat):
+            vol = gfapi.Volume("localhost", "test")
+            self.assertRaises(OSError, vol.stat, "file.txt")
+
     def test_mkdir_success(self):
         mock_glfs_mkdir = Mock()
         mock_glfs_mkdir.return_value = 0
@@ -296,7 +423,7 @@ class TestVolume(unittest.TestCase):
                 self.assertTrue(isinstance(fd, gfapi.File))
                 self.assertEqual(mock_glfs_open.call_count, 1)
                 mock_glfs_open.assert_called_once_with(2,
-                    "file.txt", os.O_WRONLY)
+                                                       "file.txt", os.O_WRONLY)
 
     def test_open_fail_exception(self):
         mock_glfs_open = Mock()
@@ -378,6 +505,25 @@ class TestVolume(unittest.TestCase):
             vol = gfapi.Volume("localhost", "test")
             self.assertRaises(OSError, vol.unlink, "file.txt")
 
+    def test_removexattr_success(self):
+        mock_glfs_removexattr = Mock()
+        mock_glfs_removexattr.return_value = 0
+
+        with patch("gluster.gfapi.api.glfs_removexattr",
+                   mock_glfs_removexattr):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.removexattr("file.txt", "key1")
+            self.assertEquals(ret, 0)
+
+    def test_removexattr_fail_exception(self):
+        mock_glfs_removexattr = Mock()
+        mock_glfs_removexattr.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_removexattr",
+                   mock_glfs_removexattr):
+            vol = gfapi.Volume("localhost", "test")
+            self.assertRaises(IOError, vol.removexattr, "file.txt", "key1")
+
     def test_setxattr_success(self):
         mock_glfs_setxattr = Mock()
         mock_glfs_setxattr.return_value = 0
@@ -394,4 +540,21 @@ class TestVolume(unittest.TestCase):
         with patch("gluster.gfapi.api.glfs_setxattr", mock_glfs_setxattr):
             vol = gfapi.Volume("localhost", "test")
             self.assertRaises(IOError, vol.setxattr, "file.txt",
-                    "key1", "hello", 5)
+                              "key1", "hello", 5)
+
+    def test_symlink_success(self):
+        mock_glfs_symlink = Mock()
+        mock_glfs_symlink.return_value = 0
+
+        with patch("gluster.gfapi.api.glfs_symlink", mock_glfs_symlink):
+            vol = gfapi.Volume("localhost", "test")
+            ret = vol.symlink("file.txt", "filelink")
+            self.assertEquals(ret, 0)
+
+    def test_symlink_fail_exception(self):
+        mock_glfs_symlink = Mock()
+        mock_glfs_symlink.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_symlink", mock_glfs_symlink):
+            vol = gfapi.Volume("localhost", "test")
+            self.assertRaises(OSError, vol.symlink, "file.txt", "filelink")
