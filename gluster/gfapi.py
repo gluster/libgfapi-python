@@ -17,6 +17,7 @@ import ctypes
 from ctypes.util import find_library
 import os
 import stat
+import errno
 
 from contextlib import contextmanager
 
@@ -82,14 +83,14 @@ api.glfs_readdir_r.argtypes = [ctypes.c_void_p, ctypes.POINTER(Dirent),
 api.glfs_stat.restype = ctypes.c_int
 api.glfs_stat.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
                           ctypes.POINTER(Stat)]
+api.glfs_fstat.restype = ctypes.c_int
+api.glfs_fstat.argtypes = [ctypes.c_void_p, ctypes.POINTER(Stat)]
 
 
 class File(object):
 
     def __init__(self, fd):
         self.fd = fd
-
-    # File operations, in alphabetical order.
 
     def close(self):
         ret = api.glfs_close(self.fd)
@@ -111,6 +112,43 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return ret
+
+    def fchown(self, uid, gid):
+        """
+        Change this file's owner and group id
+
+        :param uid: new user id for file
+        :param gid: new group id for file
+        :returns: 0 if success, raises OSError if it fails
+        """
+        ret = api.glfs_fchown(self.fd, uid, gid)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
+    def fdatasync(self):
+        """
+        Force write of file
+
+        :returns: 0 if success, raises OSError if it fails
+        """
+        ret = api.glfs_fdatasync(self.fd)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
+    def fstat(self):
+        """
+        Returns Stat object for this file.
+        """
+        s = Stat()
+        rc = api.glfs_fstat(self.fd, ctypes.byref(s))
+        if rc < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return s
 
     def fsync(self):
         ret = api.glfs_fsync(self.fd)
@@ -190,7 +228,20 @@ class Volume(object):
     def mount(self):
         return api.glfs_init(self.fs)
 
-    # File operations, in alphabetical order.
+    def chown(self, path, uid, gid):
+        """
+        Change owner and group id of path
+
+        :param path: the item to be modified
+        :param uid: new user id for item
+        :param gid: new group id for item
+        :returns: 0 if success, raises OSError if it fails
+        """
+        ret = api.glfs_chown(self.fs, path, uid, gid)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
 
     @contextmanager
     def creat(self, path, flags, mode):
@@ -261,6 +312,22 @@ class Volume(object):
             return False
         return stat.S_ISLNK(s.st_mode)
 
+    def listdir(self, path):
+        """
+        Return list of entries in a given directory 'path'.
+        "." and ".." are not included, and the list is not sorted.
+        """
+        d = self.opendir(path)
+        dir_list = []
+        while True:
+            ent = d.next()
+            if not isinstance(ent, Dirent):
+                break
+            name = ent.d_name[:ent.d_reclen]
+            if not name in [".", ".."]:
+                dir_list.append(name)
+        return dir_list
+
     def listxattr(self, path):
         buf = ctypes.create_string_buffer(512)
         rc = api.glfs_listxattr(self.fs, path, buf, 512)
@@ -292,6 +359,23 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return s
+
+    def makedirs(self, name, mode):
+        """
+        Create directories defined in 'name' recursively.
+        """
+        head, tail = os.path.split(name)
+        if not tail:
+            head, tail = os.path.split(head)
+        if head and tail and not self.exists(head):
+            try:
+                self.makedirs(head, mode)
+            except OSError as err:
+                if err.errno != errno.EEXIST:
+                    raise
+            if tail == os.curdir:
+                return
+        self.mkdir(name, mode)
 
     def mkdir(self, path, mode):
         ret = api.glfs_mkdir(self.fs, path, mode)
@@ -342,6 +426,47 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    def rmtree(self, path, ignore_errors=False, onerror=None):
+        """
+        Delete a whole directory tree structure. Raises OSError
+        if path is a symbolic link.
+
+        :param path: Directory tree to remove
+        :param ignore_errors: If True, errors are ignored
+        :param onerror: If set, it is called to handle the error with arguments
+                        (func, path, exc) where func is the function that
+                        raised the error, path is the argument that caused it
+                        to fail; and exc is the exception that was raised.
+                        If ignore_errors is False and onerror is None, an
+                        exception is raised
+        """
+        if ignore_errors:
+            def onerror(*args):
+                pass
+        elif onerror is None:
+            def onerror(*args):
+                raise
+        if self.islink(path):
+            raise OSError("Cannot call rmtree on a symbolic link")
+        names = []
+        try:
+            names = self.listdir(path)
+        except OSError as e:
+            onerror(self.listdir, path, e)
+        for name in names:
+            fullname = os.path.join(path, name)
+            if self.isdir(fullname):
+                self.rmtree(fullname, ignore_errors, onerror)
+            else:
+                try:
+                    self.unlink(fullname)
+                except OSError as e:
+                    onerror(self.unlink, fullname, e)
+        try:
+            self.rmdir(path)
+        except OSError as e:
+            onerror(self.rmdir, path, e)
+
     def setxattr(self, path, key, value, vlen):
         ret = api.glfs_setxattr(self.fs, path, key, value, vlen, 0)
         if ret < 0:
@@ -368,8 +493,46 @@ class Volume(object):
         return ret
 
     def unlink(self, path):
+        """
+        Delete the file 'path'
+
+        :param path: file to be deleted
+        :returns: 0 if success, raises OSError if it fails
+        """
         ret = api.glfs_unlink(self.fs, path)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return ret
+
+    def walk(self, top, topdown=True, onerror=None, followlinks=False):
+        """
+        Directory tree generator. Yields a 3-tuple dirpath, dirnames, filenames
+
+        dirpath is the path to the directory, dirnames is a list of the names
+        of the subdirectories in dirpath. filenames is a list of the names of
+        the non-directiry files in dirpath
+        """
+        try:
+            names = self.listdir(top)
+        except OSError as err:
+            if onerror is not None:
+                onerror(err)
+            return
+
+        dirs, nondirs = [], []
+        for name in names:
+            if self.isdir(os.path.join(top, name)):
+                dirs.append(name)
+            else:
+                nondirs.append(name)
+
+        if topdown:
+            yield top, dirs, nondirs
+        for name in dirs:
+            new_path = os.path.join(top, name)
+            if followlinks or not self.islink(new_path):
+                for x in self.walk(new_path, topdown, onerror, followlinks):
+                    yield x
+        if not topdown:
+            yield top, dirs, nondirs

@@ -73,6 +73,8 @@ class FileOpsTest(unittest.TestCase):
         with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
             rc = fd.write(self.data)
             self.assertEqual(rc, len(self.data))
+            ret = fd.fsync()
+            self.assertEqual(ret, 0)
 
     def tearDown(self):
         self.path = None
@@ -164,7 +166,6 @@ class DirOpsTest(unittest.TestCase):
 
     data = None
     dir_path = None
-    file_path = None
     testfile = None
 
     @classmethod
@@ -172,7 +173,7 @@ class DirOpsTest(unittest.TestCase):
         cls.vol = gfapi.Volume("gfshost", "test")
         cls.vol.set_logging("/dev/null", 7)
         cls.vol.mount()
-        cls.testfile = "testfile.io"
+        cls.testfile = "testfile"
 
     @classmethod
     def tearDownClass(cls):
@@ -183,15 +184,16 @@ class DirOpsTest(unittest.TestCase):
         self.data = loremipsum.get_sentence()
         self.dir_path = self._testMethodName + "_dir"
         self.vol.mkdir(self.dir_path, 0755)
-        self.file_path = self.dir_path + "/" + self.testfile
-        with self.vol.creat(
-                self.file_path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
-            rc = fd.write(self.data)
-            self.assertEqual(rc, len(self.data))
+        for x in range(0, 3):
+            f = os.path.join(self.dir_path, self.testfile + str(x))
+            with self.vol.creat(f, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+                rc = fd.write(self.data)
+                self.assertEqual(rc, len(self.data))
+                ret = fd.fdatasync()
+                self.assertEqual(ret, 0)
 
     def tearDown(self):
         self.dir_path = None
-        self.file_path = None
         self.data = None
 
     def test_isdir(self):
@@ -202,23 +204,20 @@ class DirOpsTest(unittest.TestCase):
         isfile = self.vol.isfile(self.dir_path)
         self.assertFalse(isfile)
 
-    def test_dir_listing(self):
-        fd = self.vol.opendir(self.dir_path)
-        self.assertTrue(isinstance(fd, gfapi.Dir))
-        files = []
-        while True:
-            ent = fd.next()
-            if not isinstance(ent, gfapi.Dirent):
-                break
-            name = ent.d_name[:ent.d_reclen]
-            files.append(name)
-        self.assertEqual(files, [".", "..", self.testfile])
+    def test_listdir(self):
+        dir_list = self.vol.listdir(self.dir_path)
+        self.assertEqual(dir_list, ["testfile0", "testfile1", "testfile2"])
 
-    def test_delete_file_and_dir(self):
-        ret = self.vol.unlink(self.file_path)
-        self.assertEqual(ret, 0)
-        self.assertRaises(OSError, self.vol.lstat, self.file_path)
+    def test_makedirs(self):
+        name = self.dir_path + "/subd1/subd2/subd3"
+        self.vol.makedirs(name, 0755)
+        self.assertTrue(self.vol.isdir(name))
 
-        ret = self.vol.rmdir(self.dir_path)
-        self.assertEqual(ret, 0)
+    def test_rmtree(self):
+        """
+        by testing rmtree, we are also testing unlink and rmdir
+        """
+        f = os.path.join(self.dir_path, self.testfile + "1")
+        self.vol.rmtree(self.dir_path, True)
+        self.assertRaises(OSError, self.vol.lstat, f)
         self.assertRaises(OSError, self.vol.lstat, self.dir_path)
