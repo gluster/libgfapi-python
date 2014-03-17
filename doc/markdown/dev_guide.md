@@ -4,7 +4,7 @@
 
 The workflow for libgfapi-python is largely based upon the [Gluster-Swift Developer Guide][]  and [OpenStack Gerrit Workflow][]. Refer to those documents for setting up a Gerrit account and a complete development environment.
 
-This document focuses on setting up a quick environment for running tox tests (especially the functional tests).
+This document focuses on setting up a quick environment for running tox tests (especially the functional tests). This document also assumes that GlusterFS is already installed. On CentOS/RHEL you will need to setup GlsuterFS and EPEL repos.
 
 
 ### Package Requirements
@@ -51,10 +51,12 @@ cd libgfapi-python
 
 ### Tox and Nose
 
-libgfapi-python uses tox python virtual environment for its unit and functional tests. To install tox type:
+libgfapi-python uses tox python virtual environment for its unit and functional tests. There is currently an incompatibility issue with the latest version of tox and virtualenv. To work around these issues, install install tox, nose and virutalenv by typing this:
 
 ```
-sudo pip install --upgrade tox nose
+sudo pip install --upgrade "tox>=1.6,<1.7"
+sudo pip install --upgrade "virtualenv>=1.10,<1.11"
+sudo pip install --upgrade nose
 ```
 
 ### Git Review
@@ -200,7 +202,7 @@ If new functionality has been added, it is highly recommended that one or more t
 
 ### Functional tests
 
-The functional tests expects a `test` volume to be created and accessible.
+The functional tests expects a GlusterFS `test` volume to be created and accessible.
 
 To run the functional tests, please type:
 
