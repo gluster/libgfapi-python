@@ -18,7 +18,7 @@ import os
 import types
 import loremipsum
 
-from gluster import gfapi
+from glusterfs import gfapi
 
 
 class BinFileOpsTest(unittest.TestCase):

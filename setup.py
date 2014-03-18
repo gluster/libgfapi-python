@@ -16,7 +16,7 @@
 
 from setuptools import setup, find_packages
 
-from gluster import __canonical_version__ as version
+from glusterfs import __canonical_version__ as version
 
 
 name = 'gfapi'
