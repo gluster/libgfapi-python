@@ -19,8 +19,6 @@ import os
 import stat
 import errno
 
-from contextlib import contextmanager
-
 # Disclaimer: many of the helper functions (e.g., exists, isdir) where copied
 # from the python source code
 
@@ -91,6 +89,17 @@ class File(object):
 
     def __init__(self, fd):
         self.fd = fd
+
+    def __enter__(self):
+        if self.fd is None:
+            # __enter__ should only be called within the context
+            # of a 'with' statement when opening a file through
+            # Volume.open()
+            raise ValueError("I/O operation on closed file")
+        return self
+
+    def __exit__(self, type, value, tb):
+        self.close()
 
     def close(self):
         ret = api.glfs_close(self.fd)
@@ -243,20 +252,6 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return ret
 
-    @contextmanager
-    def creat(self, path, flags, mode):
-        fd = api.glfs_creat(self.fs, path, flags, mode)
-        if not fd:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
-
-        fileobj = None
-        try:
-            fileobj = File(fd)
-            yield fileobj
-        finally:
-            fileobj.close()
-
     def exists(self, path):
         """
         Test whether a path exists.
@@ -384,19 +379,16 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return ret
 
-    @contextmanager
-    def open(self, path, flags):
-        fd = api.glfs_open(self.fs, path, flags)
+    def open(self, path, flags, mode=0777):
+        if (os.O_CREAT & flags) == os.O_CREAT:
+            fd = api.glfs_creat(self.fs, path, flags, mode)
+        else:
+            fd = api.glfs_open(self.fs, path, flags)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
-        fileobj = None
-        try:
-            fileobj = File(fd)
-            yield fileobj
-        finally:
-            fileobj.close()
+        return File(fd)
 
     def opendir(self, path):
         fd = api.glfs_opendir(self.fs, path)

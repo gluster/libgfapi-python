@@ -17,6 +17,7 @@ import unittest
 import os
 import types
 import loremipsum
+import errno
 
 from glusterfs import gfapi
 
@@ -40,7 +41,8 @@ class BinFileOpsTest(unittest.TestCase):
     def setUp(self):
         self.data = bytearray([(k % 128) for k in range(0, 1024)])
         self.path = self._testMethodName + ".io"
-        with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+        with self.vol.open(self.path, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+                           0644) as fd:
             fd.write(self.data)
 
     def test_bin_open_and_read(self):
@@ -70,7 +72,8 @@ class FileOpsTest(unittest.TestCase):
     def setUp(self):
         self.data = loremipsum.get_sentence()
         self.path = self._testMethodName + ".io"
-        with self.vol.creat(self.path, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+        with self.vol.open(self.path, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+                           0644) as fd:
             rc = fd.write(self.data)
             self.assertEqual(rc, len(self.data))
             ret = fd.fsync()
@@ -86,6 +89,26 @@ class FileOpsTest(unittest.TestCase):
             buf = fd.read(len(self.data))
             self.assertFalse(isinstance(buf, types.IntType))
             self.assertEqual(buf.value, self.data)
+
+    def test_open_file_not_exist(self):
+        try:
+            f = self.vol.open("filenotexist", os.O_WRONLY)
+        except OSError as e:
+            self.assertEqual(e.errno, errno.ENOENT)
+        else:
+            f.close()
+            self.fail("Expected a OSError with errno.ENOENT")
+
+    def test_create_file_already_exists(self):
+        try:
+            f = self.vol.open("newfile", os.O_CREAT)
+            f.close()
+            g = self.vol.open("newfile", os.O_CREAT | os.O_EXCL)
+        except OSError as e:
+            self.assertEqual(e.errno, errno.EEXIST)
+        else:
+            g.close()
+            self.fail("Expected a OSError with errno.EEXIST")
 
     def test_exists(self):
         e = self.vol.exists(self.path)
@@ -186,7 +209,8 @@ class DirOpsTest(unittest.TestCase):
         self.vol.mkdir(self.dir_path, 0755)
         for x in range(0, 3):
             f = os.path.join(self.dir_path, self.testfile + str(x))
-            with self.vol.creat(f, os.O_WRONLY | os.O_EXCL, 0644) as fd:
+            with self.vol.open(f, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+                               0644) as fd:
                 rc = fd.write(self.data)
                 self.assertEqual(rc, len(self.data))
                 ret = fd.fdatasync()
