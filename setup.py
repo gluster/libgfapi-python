@@ -34,15 +34,14 @@ setup(
     test_suite='nose.collector',
     classifiers=[
         'Development Status :: 5 - Production/Stable'
-        'Environment :: OpenStack'
-        'Intended Audience :: Information Technology'
-        'Intended Audience :: System Administrators'
+        'Intended Audience :: Developers'
         'License :: OSI Approved :: Apache Software License'
         'Operating System :: POSIX :: Linux'
         'Programming Language :: Python'
         'Programming Language :: Python :: 2'
         'Programming Language :: Python :: 2.6'
         'Programming Language :: Python :: 2.7'
+        'Topic :: System :: Filesystems'
     ],
     install_requires=[],
     scripts=[],
