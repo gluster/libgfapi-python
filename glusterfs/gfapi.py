@@ -87,8 +87,9 @@ api.glfs_fstat.argtypes = [ctypes.c_void_p, ctypes.POINTER(Stat)]
 
 class File(object):
 
-    def __init__(self, fd):
+    def __init__(self, fd, path=None):
         self.fd = fd
+        self.originalpath = path
 
     def __enter__(self):
         if self.fd is None:
@@ -114,6 +115,13 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return ret
+
+    def dup(self):
+        dupfd = api.glfs_dup(self.fd)
+        if not dupfd:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return File(dupfd, self.originalpath)
 
     def fallocate(self, mode, offset, len):
         ret = api.glfs_fallocate(self.fd, mode, offset, len)
@@ -165,6 +173,21 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return ret
+
+    def lseek(self, pos, how):
+        """
+        Set the read/write offset position of this file.
+        The new position is defined by 'pos' relative to 'how'
+
+        :param pos: sets new offset position according to 'how'
+        :param how: SEEK_SET, sets offset position 'pos' bytes relative to
+                    beginning of file, SEEK_CUR, the position is set relative
+                    to the current position and SEEK_END sets the position
+                    relative to the end of the file.
+        :returns: the new offset position
+
+        """
+        return api.glfs_lseek(self.fd, pos, how)
 
     def read(self, buflen, flags=0):
         rbuf = ctypes.create_string_buffer(buflen)
@@ -262,6 +285,27 @@ class Volume(object):
         except OSError:
             return False
         return True
+
+    def getatime(self, path):
+        """
+        Returns the last access time as reported by stat
+        """
+        return self.stat(path).st_atime
+
+    def getctime(self, path):
+        """
+        Returns the time when changes were made to the path as reported by stat
+        This time is updated when changes are made to the file or dir's inode
+        or the contents of the file
+        """
+        return self.stat(path).st_ctime
+
+    def getmtime(self, path):
+        """
+        Returns the time when changes were made to the content of the path
+        as reported by stat
+        """
+        return self.stat(path).st_mtime
 
     def getsize(self, filename):
         """
@@ -388,7 +432,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
-        return File(fd)
+        return File(fd, path)
 
     def opendir(self, path):
         fd = api.glfs_opendir(self.fs, path)

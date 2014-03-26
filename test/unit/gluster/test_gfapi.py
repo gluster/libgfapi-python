@@ -49,7 +49,7 @@ class TestFile(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.fd = gfapi.File(2)
+        cls.fd = gfapi.File(2, 'fakefile')
 
     @classmethod
     def tearDownClass(cls):
@@ -76,6 +76,16 @@ class TestFile(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_fchown", mock_glfs_fchown):
             self.assertRaises(OSError, self.fd.fchown, 9, 11)
+
+    def test_dup(self):
+        mock_glfs_dup = Mock()
+        mock_glfs_dup.return_value = 2
+
+        with patch("glusterfs.gfapi.api.glfs_dup", mock_glfs_dup):
+            f = self.fd.dup()
+            self.assertTrue(isinstance(f, gfapi.File))
+            self.assertEqual(f.originalpath, "fakefile")
+            self.assertEqual(f.fd, 2)
 
     def test_fdatasync_success(self):
         mock_glfs_fdatasync = Mock()
@@ -121,6 +131,14 @@ class TestFile(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_fsync", mock_glfs_fsync):
             self.assertRaises(OSError, self.fd.fsync)
+
+    def test_lseek_success(self):
+        mock_glfs_lseek = Mock()
+        mock_glfs_lseek.return_value = 20
+
+        with patch("glusterfs.gfapi.api.glfs_lseek", mock_glfs_lseek):
+            o = self.fd.lseek(20, os.SEEK_SET)
+            self.assertEqual(o, 20)
 
     def test_read_success(self):
         def _mock_glfs_read(fd, rbuf, buflen, flags):

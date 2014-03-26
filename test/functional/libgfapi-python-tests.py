@@ -78,6 +78,7 @@ class FileOpsTest(unittest.TestCase):
             self.assertEqual(rc, len(self.data))
             ret = fd.fsync()
             self.assertEqual(ret, 0)
+            self.assertEqual(fd.originalpath, self.path)
 
     def tearDown(self):
         self.path = None
@@ -109,6 +110,29 @@ class FileOpsTest(unittest.TestCase):
         else:
             g.close()
             self.fail("Expected a OSError with errno.EEXIST")
+
+    def test_write_file_dup_lseek_read(self):
+        try:
+            f = self.vol.open("dune", os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            f.write("I must not fear. Fear is the mind-killer.")
+            fdup = f.dup()
+            self.assertTrue(isinstance(fdup, gfapi.File))
+            f.close()
+            ret = fdup.lseek(0, os.SEEK_SET)
+            self.assertEqual(ret, 0)
+
+            buf = fdup.read(15)
+            self.assertEqual(buf.value, "I must not fear")
+
+            ret = fdup.lseek(29, os.SEEK_SET)
+            self.assertEqual(ret, 29)
+
+            buf = fdup.read(11)
+            self.assertEqual(buf.value, "mind-killer")
+
+            fdup.close()
+        except OSError as e:
+            self.fail(e.message)
 
     def test_exists(self):
         e = self.vol.exists(self.path)
