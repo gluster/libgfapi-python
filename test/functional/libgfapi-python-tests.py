@@ -261,6 +261,16 @@ class DirOpsTest(unittest.TestCase):
         self.vol.makedirs(name, 0755)
         self.assertTrue(self.vol.isdir(name))
 
+    def test_statvfs(self):
+        sb = self.vol.statvfs("/")
+        self.assertFalse(isinstance(sb, types.IntType))
+        self.assertEqual(sb.f_namemax, 255L)
+        # creating a dir, checking Total number of free inodes
+        # is reduced
+        self.vol.makedirs("statvfs_dir1", 0755)
+        sb2 = self.vol.statvfs("/")
+        self.assertTrue(sb2.f_ffree < sb.f_ffree)
+
     def test_rmtree(self):
         """
         by testing rmtree, we are also testing unlink and rmdir

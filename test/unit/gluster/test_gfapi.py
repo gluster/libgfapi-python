@@ -498,6 +498,21 @@ class TestVolume(unittest.TestCase):
         with patch("glusterfs.gfapi.api.glfs_stat", mock_glfs_stat):
             self.assertRaises(OSError, self.vol.stat, "file.txt")
 
+    def test_statvfs_success(self):
+        mock_glfs_statvfs = Mock()
+        mock_glfs_statvfs.return_value = 0
+
+        with patch("glusterfs.gfapi.api.glfs_statvfs", mock_glfs_statvfs):
+            s = self.vol.statvfs("/")
+            self.assertTrue(isinstance(s, gfapi.Statvfs))
+
+    def test_statvfs_fail_exception(self):
+        mock_glfs_statvfs = Mock()
+        mock_glfs_statvfs.return_value = -1
+
+        with patch("glusterfs.gfapi.api.glfs_statvfs", mock_glfs_statvfs):
+            self.assertRaises(OSError, self.vol.statvfs, "/")
+
     def test_makedirs_success(self):
         mock_glfs_mkdir = Mock()
         mock_glfs_mkdir.side_effect = [0, 0]

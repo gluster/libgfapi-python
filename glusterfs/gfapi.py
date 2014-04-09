@@ -60,6 +60,23 @@ class Stat (ctypes.Structure):
     ]
 
 
+class Statvfs (ctypes.Structure):
+    _fields_ = [
+        ("f_bsize", ctypes.c_ulong),
+        ("f_frsize", ctypes.c_ulong),
+        ("f_blocks", ctypes.c_ulong),
+        ("f_bfree", ctypes.c_ulong),
+        ("f_bavail", ctypes.c_ulong),
+        ("f_files", ctypes.c_ulong),
+        ("f_ffree", ctypes.c_ulong),
+        ("f_favail", ctypes.c_ulong),
+        ("f_fsid", ctypes.c_ulong),
+        ("f_flag", ctypes.c_ulong),
+        ("f_namemax", ctypes.c_ulong),
+        ("__f_spare", ctypes.c_int * 6),
+    ]
+
+
 class Dirent (ctypes.Structure):
     _fields_ = [
         ("d_ino", ctypes.c_ulong),
@@ -513,6 +530,18 @@ class Volume(object):
     def stat(self, path):
         s = Stat()
         rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
+        if rc < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return s
+
+    def statvfs(self, path):
+        """
+        To get status information about the file system that contains the file
+        named by the path argument.
+        """
+        s = Statvfs()
+        rc = api.glfs_statvfs(self.fs, path, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
