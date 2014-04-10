@@ -20,6 +20,22 @@ import loremipsum
 import errno
 
 from glusterfs import gfapi
+from test import get_test_config
+from ConfigParser import NoSectionError, NoOptionError
+
+config = get_test_config()
+if config:
+    try:
+        HOST = config.get('func_test', 'gfs_host')
+    except (NoSectionError, NoOptionError):
+        HOST = 'gfshost'
+    try:
+        VOLNAME = config.get('func_test', 'gfs_volname')
+    except (NoSectionError, NoOptionError):
+        VOLNAME = 'test'
+else:
+    HOST = 'gfshost'
+    VOLNAME = 'test'
 
 
 class BinFileOpsTest(unittest.TestCase):
@@ -30,12 +46,19 @@ class BinFileOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume("gfshost", "test")
+        cls.vol = gfapi.Volume(HOST, VOLNAME)
         cls.vol.set_logging("/dev/null", 7)
-        cls.vol.mount()
+        ret = cls.vol.mount()
+        if ret == 0:
+            # Cleanup volume
+            cls.vol.rmtree("/", ignore_errors=True)
+        else:
+            raise Exception("Initializing volume %s:%s failed." %
+                            (HOST, VOLNAME))
 
     @classmethod
     def tearDownClass(cls):
+        cls.vol.rmtree("/", ignore_errors=True)
         cls.vol = None
 
     def setUp(self):
@@ -61,12 +84,19 @@ class FileOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume("gfshost", "test")
+        cls.vol = gfapi.Volume(HOST, VOLNAME)
         cls.vol.set_logging("/dev/null", 7)
-        cls.vol.mount()
+        ret = cls.vol.mount()
+        if ret == 0:
+            # Cleanup volume
+            cls.vol.rmtree("/", ignore_errors=True)
+        else:
+            raise Exception("Initializing volume %s:%s failed." %
+                            (HOST, VOLNAME))
 
     @classmethod
     def tearDownClass(cls):
+        cls.vol.rmtree("/", ignore_errors=True)
         cls.vol = None
 
     def setUp(self):
@@ -195,7 +225,7 @@ class FileOpsTest(unittest.TestCase):
 
         xattrs = self.vol.listxattr(self.path)
         self.assertFalse(isinstance(xattrs, types.IntType))
-        self.assertEqual(xattrs, ["trusted.key1", "trusted.key2"])
+        self.assertTrue(set(["trusted.key1", "trusted.key2"]) <= set(xattrs))
 
         buf = self.vol.getxattr(self.path, "trusted.key1", 32)
         self.assertFalse(isinstance(buf, types.IntType))
@@ -206,7 +236,7 @@ class FileOpsTest(unittest.TestCase):
 
         xattrs = self.vol.listxattr(self.path)
         self.assertFalse(isinstance(xattrs, types.IntType))
-        self.assertEqual(xattrs, ["trusted.key2"])
+        self.assertTrue(["trusted.key1"] not in xattrs)
 
 
 class DirOpsTest(unittest.TestCase):
@@ -217,13 +247,21 @@ class DirOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume("gfshost", "test")
+        cls.vol = gfapi.Volume(HOST, VOLNAME)
         cls.vol.set_logging("/dev/null", 7)
         cls.vol.mount()
+        ret = cls.vol.mount()
+        if ret == 0:
+            # Cleanup volume
+            cls.vol.rmtree("/", ignore_errors=True)
+        else:
+            raise Exception("Initializing volume %s:%s failed." %
+                            (HOST, VOLNAME))
         cls.testfile = "testfile"
 
     @classmethod
     def tearDownClass(cls):
+        cls.vol.rmtree("/", ignore_errors=True)
         cls.vol = None
         cls.testfile = None
 
@@ -254,6 +292,7 @@ class DirOpsTest(unittest.TestCase):
 
     def test_listdir(self):
         dir_list = self.vol.listdir(self.dir_path)
+        dir_list.sort()
         self.assertEqual(dir_list, ["testfile0", "testfile1", "testfile2"])
 
     def test_makedirs(self):

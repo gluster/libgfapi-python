@@ -18,48 +18,29 @@
 # This program expects to be run by tox in a virtual python environment
 # so that it does not pollute the host development system
 
-sudo_env()
-{
-    sudo bash -c "PATH=$PATH $*"
-}
-
 cleanup()
 {
+    if [ -d "/export/brick/b1/" ]; then
         sudo rm -rf /export/brick/b1/* > /dev/null 2>&1
+    fi
 }
-
-quit()
-{
-        echo "$1"
-        exit 1
-}
-
 
 fail()
 {
-        cleanup
-	quit "$1"
+    cleanup
+    echo "$1"
+    exit 1
 }
 
 ### MAIN ###
 
-
-# Check the directories exist
-DIRS="/export/brick/b1"
-for d in $DIRS ; do
-	if [ ! -x $d ] ; then
-		quit "$d must exist as GlusterFS volume"
-	fi
-done
-
-
 mkdir functional_tests > /dev/null 2>&1
 nosetests -v --exe \
-	--with-xunit \
-	--xunit-file functional_tests/libgfapi-python.xml \
-    --with-html-output \
-    --html-out-file functional_tests/libgfapi-python-result.html \
-    test/functional || fail "Functional tests failed"
+          --with-xunit \
+          --xunit-file functional_tests/libgfapi-python.xml \
+          --with-html-output \
+          --html-out-file functional_tests/libgfapi-python-result.html \
+          test/functional || fail "Functional tests failed"
 
 cleanup
 exit 0

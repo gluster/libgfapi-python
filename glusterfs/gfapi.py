@@ -25,6 +25,9 @@ import errno
 # Looks like ctypes is having trouble with dependencies, so just force them to
 # load with RTLD_GLOBAL until I figure that out.
 api = ctypes.CDLL(find_library("gfapi"), ctypes.RTLD_GLOBAL, use_errno=True)
+# The above statement "may" fail with OSError on some systems if libgfapi.so
+# is located in /usr/local/lib/. This happens when glusterfs is installed from
+# source. Refer to: http://bugs.python.org/issue18502
 
 # Wow, the Linux kernel folks really play nasty games with this structure.  If
 # you look at the man page for stat(2) and then at this definition you'll note

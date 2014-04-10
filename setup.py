@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 from glusterfs import __canonical_version__ as version
 
@@ -30,7 +30,7 @@ setup(
     author='Red Hat, Inc.',
     author_email='gluster-users@gluster.org',
     url='http://www.gluster.org',
-    packages=find_packages(exclude=['test']),
+    packages=['glusterfs', ],
     test_suite='nose.collector',
     classifiers=[
         'Development Status :: 5 - Production/Stable'
