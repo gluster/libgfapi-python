@@ -104,6 +104,12 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    def fgetsize(self):
+        """
+        Return the size of a file, reported by fstat()
+        """
+        return self.fstat().st_size
+
     def fstat(self):
         """
         Returns Stat object for this file.
@@ -137,9 +143,18 @@ class File(object):
         """
         return api.glfs_lseek(self.fd, pos, how)
 
-    def read(self, buflen, flags=0):
+    def read(self, buflen=-1):
+        """
+        read file
+
+        :param buflen: length of read buffer. If less than 0, then whole
+                       file is read. Default is -1.
+        :returns: buffer of size buflen
+        """
+        if buflen < 0:
+            buflen = self.fgetsize()
         rbuf = ctypes.create_string_buffer(buflen)
-        ret = api.glfs_read(self.fd, rbuf, buflen, flags)
+        ret = api.glfs_read(self.fd, rbuf, buflen, 0)
         if ret > 0:
             return rbuf
         elif ret < 0:

@@ -180,6 +180,18 @@ class TestFile(unittest.TestCase):
             b = self.fd.read(5)
             self.assertEqual(b, 0)
 
+    def test_read_buflen_negative(self):
+        _mock_fgetsize = Mock(return_value=12345)
+
+        def _mock_glfs_read(fd, rbuf, buflen, flags):
+            self.assertEqual(buflen, 12345)
+            return buflen
+
+        for buflen in (-1,-2,-999):
+            with patch("glusterfs.gfapi.api.glfs_read", _mock_glfs_read):
+                with patch("glusterfs.gfapi.File.fgetsize", _mock_fgetsize):
+                    b = self.fd.read(buflen)
+
     def test_write_success(self):
         mock_glfs_write = Mock()
         mock_glfs_write.return_value = 5
