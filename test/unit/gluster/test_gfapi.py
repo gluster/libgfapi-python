@@ -20,6 +20,7 @@ import stat
 import errno
 
 from glusterfs import gfapi
+from glusterfs import api
 from nose import SkipTest
 from mock import Mock, patch
 from contextlib import nested
@@ -108,7 +109,7 @@ class TestFile(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_fstat", mock_glfs_fstat):
             s = self.fd.fstat()
-            self.assertTrue(isinstance(s, gfapi.Stat))
+            self.assertTrue(isinstance(s, api.Stat))
 
     def test_fstat_fail_exception(self):
         mock_glfs_fstat = Mock()
@@ -296,7 +297,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_creat = Mock()
         mock_glfs_creat.return_value = 2
 
-        with patch("glusterfs.gfapi.api.glfs_creat", mock_glfs_creat):
+        with patch("glusterfs.api.client.glfs_creat", mock_glfs_creat):
             with self.vol.open("file.txt", os.O_CREAT, 0644) as fd:
                 self.assertTrue(isinstance(fd, gfapi.File))
                 self.assertEqual(mock_glfs_creat.call_count, 1)
@@ -322,7 +323,7 @@ class TestVolume(unittest.TestCase):
 
     def test_isdir_true(self):
         mock_glfs_stat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFDIR
         mock_glfs_stat.return_value = s
 
@@ -332,7 +333,7 @@ class TestVolume(unittest.TestCase):
 
     def test_isdir_false(self):
         mock_glfs_stat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFREG
         mock_glfs_stat.return_value = s
 
@@ -350,7 +351,7 @@ class TestVolume(unittest.TestCase):
 
     def test_isfile_true(self):
         mock_glfs_stat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFREG
         mock_glfs_stat.return_value = s
 
@@ -360,7 +361,7 @@ class TestVolume(unittest.TestCase):
 
     def test_isfile_false(self):
         mock_glfs_stat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFDIR
         mock_glfs_stat.return_value = s
 
@@ -378,7 +379,7 @@ class TestVolume(unittest.TestCase):
 
     def test_islink_true(self):
         mock_glfs_lstat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFLNK
         mock_glfs_lstat.return_value = s
 
@@ -388,7 +389,7 @@ class TestVolume(unittest.TestCase):
 
     def test_islink_false(self):
         mock_glfs_lstat = Mock()
-        s = gfapi.Stat()
+        s = api.Stat()
         s.st_mode = stat.S_IFREG
         mock_glfs_lstat.return_value = s
 
@@ -425,13 +426,13 @@ class TestVolume(unittest.TestCase):
         mock_glfs_opendir = Mock()
         mock_glfs_opendir.return_value = 2
 
-        dirent1 = gfapi.Dirent()
+        dirent1 = api.Dirent()
         dirent1.d_name = "mockfile"
         dirent1.d_reclen = 8
-        dirent2 = gfapi.Dirent()
+        dirent2 = api.Dirent()
         dirent2.d_name = "mockdir"
         dirent2.d_reclen = 7
-        dirent3 = gfapi.Dirent()
+        dirent3 = api.Dirent()
         dirent3.d_name = "."
         dirent3.d_reclen = 1
         mock_Dir_next = Mock()
@@ -474,7 +475,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_lstat", mock_glfs_lstat):
             s = self.vol.lstat("file.txt")
-            self.assertTrue(isinstance(s, gfapi.Stat))
+            self.assertTrue(isinstance(s, api.Stat))
 
     def test_lstat_fail_exception(self):
         mock_glfs_lstat = Mock()
@@ -489,7 +490,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_stat", mock_glfs_stat):
             s = self.vol.stat("file.txt")
-            self.assertTrue(isinstance(s, gfapi.Stat))
+            self.assertTrue(isinstance(s, api.Stat))
 
     def test_stat_fail_exception(self):
         mock_glfs_stat = Mock()
@@ -504,7 +505,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("glusterfs.gfapi.api.glfs_statvfs", mock_glfs_statvfs):
             s = self.vol.statvfs("/")
-            self.assertTrue(isinstance(s, gfapi.Statvfs))
+            self.assertTrue(isinstance(s, api.Statvfs))
 
     def test_statvfs_fail_exception(self):
         mock_glfs_statvfs = Mock()
@@ -572,7 +573,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_open = Mock()
         mock_glfs_open.return_value = 2
 
-        with patch("glusterfs.gfapi.api.glfs_open", mock_glfs_open):
+        with patch("glusterfs.api.client.glfs_open", mock_glfs_open):
             with self.vol.open("file.txt", os.O_WRONLY) as fd:
                 self.assertTrue(isinstance(fd, gfapi.File))
                 self.assertEqual(mock_glfs_open.call_count, 1)
@@ -587,14 +588,14 @@ class TestVolume(unittest.TestCase):
             with self.vol.open("file.txt", os.O_WRONLY) as fd:
                 self.assertEqual(fd, None)
 
-        with patch("glusterfs.gfapi.api.glfs_open", mock_glfs_open):
+        with patch("glusterfs.api.client.glfs_open", mock_glfs_open):
             self.assertRaises(OSError, assert_open)
 
     def test_open_direct_success(self):
         mock_glfs_open = Mock()
         mock_glfs_open.return_value = 2
 
-        with patch("glusterfs.gfapi.api.glfs_open", mock_glfs_open):
+        with patch("glusterfs.api.client.glfs_open", mock_glfs_open):
             fd = self.vol.open("file.txt", os.O_WRONLY)
             self.assertTrue(isinstance(fd, gfapi.File))
             self.assertEqual(mock_glfs_open.call_count, 1)
@@ -604,7 +605,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_open = Mock()
         mock_glfs_open.return_value = None
 
-        with patch("glusterfs.gfapi.api.glfs_open", mock_glfs_open):
+        with patch("glusterfs.api.client.glfs_open", mock_glfs_open):
             self.assertRaises(OSError, self.vol.open, "file.txt", os.O_RDONLY)
 
     def test_opendir_success(self):

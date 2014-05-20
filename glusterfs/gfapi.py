@@ -14,95 +14,10 @@
 # limitations under the License.
 
 import ctypes
-from ctypes.util import find_library
 import os
 import stat
 import errno
-
-# Disclaimer: many of the helper functions (e.g., exists, isdir) where copied
-# from the python source code
-
-# Looks like ctypes is having trouble with dependencies, so just force them to
-# load with RTLD_GLOBAL until I figure that out.
-api = ctypes.CDLL(find_library("gfapi"), ctypes.RTLD_GLOBAL, use_errno=True)
-# The above statement "may" fail with OSError on some systems if libgfapi.so
-# is located in /usr/local/lib/. This happens when glusterfs is installed from
-# source. Refer to: http://bugs.python.org/issue18502
-
-# Wow, the Linux kernel folks really play nasty games with this structure.  If
-# you look at the man page for stat(2) and then at this definition you'll note
-# two discrepancies.  First, we seem to have st_nlink and st_mode reversed.  In
-# fact that's exactly how they're defined *for 64-bit systems*; for 32-bit
-# they're in the man-page order.  Even uglier, the man page makes no mention of
-# the *nsec fields, but they are very much present and if they're not included
-# then we get memory corruption because libgfapi has a structure definition
-# that's longer than ours and they overwrite some random bit of memory after
-# the space we allocated.  Yes, that's all very disgusting, and I'm still not
-# sure this will really work on 32-bit because all of the field types are so
-# obfuscated behind macros and feature checks.
-
-
-class Stat (ctypes.Structure):
-    _fields_ = [
-        ("st_dev", ctypes.c_ulong),
-        ("st_ino", ctypes.c_ulong),
-        ("st_nlink", ctypes.c_ulong),
-        ("st_mode", ctypes.c_uint),
-        ("st_uid", ctypes.c_uint),
-        ("st_gid", ctypes.c_uint),
-        ("st_rdev", ctypes.c_ulong),
-        ("st_size", ctypes.c_ulong),
-        ("st_blksize", ctypes.c_ulong),
-        ("st_blocks", ctypes.c_ulong),
-        ("st_atime", ctypes.c_ulong),
-        ("st_atimensec", ctypes.c_ulong),
-        ("st_mtime", ctypes.c_ulong),
-        ("st_mtimensec", ctypes.c_ulong),
-        ("st_ctime", ctypes.c_ulong),
-        ("st_ctimensec", ctypes.c_ulong),
-    ]
-
-
-class Statvfs (ctypes.Structure):
-    _fields_ = [
-        ("f_bsize", ctypes.c_ulong),
-        ("f_frsize", ctypes.c_ulong),
-        ("f_blocks", ctypes.c_ulong),
-        ("f_bfree", ctypes.c_ulong),
-        ("f_bavail", ctypes.c_ulong),
-        ("f_files", ctypes.c_ulong),
-        ("f_ffree", ctypes.c_ulong),
-        ("f_favail", ctypes.c_ulong),
-        ("f_fsid", ctypes.c_ulong),
-        ("f_flag", ctypes.c_ulong),
-        ("f_namemax", ctypes.c_ulong),
-        ("__f_spare", ctypes.c_int * 6),
-    ]
-
-
-class Dirent (ctypes.Structure):
-    _fields_ = [
-        ("d_ino", ctypes.c_ulong),
-        ("d_off", ctypes.c_ulong),
-        ("d_reclen", ctypes.c_ushort),
-        ("d_type", ctypes.c_char),
-        ("d_name", ctypes.c_char * 256),
-    ]
-
-api.glfs_creat.restype = ctypes.c_void_p
-api.glfs_open.restype = ctypes.c_void_p
-api.glfs_lstat.restype = ctypes.c_int
-api.glfs_lstat.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
-                           ctypes.POINTER(Stat)]
-api.glfs_opendir.restype = ctypes.c_void_p
-api.glfs_readdir_r.restype = ctypes.c_int
-api.glfs_readdir_r.argtypes = [ctypes.c_void_p, ctypes.POINTER(Dirent),
-                               ctypes.POINTER(ctypes.POINTER(Dirent))]
-api.glfs_stat.restype = ctypes.c_int
-api.glfs_stat.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
-                          ctypes.POINTER(Stat)]
-api.glfs_fstat.restype = ctypes.c_int
-api.glfs_fstat.argtypes = [ctypes.c_void_p, ctypes.POINTER(Stat)]
+from glusterfs import api
 
 
 class File(object):
@@ -130,7 +45,7 @@ class File(object):
         return ret
 
     def discard(self, offset, len):
-        ret = api.glfs_discard(self.fd, offset, len)
+        ret = api.client.glfs_discard(self.fd, offset, len)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -144,7 +59,7 @@ class File(object):
         return File(dupfd, self.originalpath)
 
     def fallocate(self, mode, offset, len):
-        ret = api.glfs_fallocate(self.fd, mode, offset, len)
+        ret = api.client.glfs_fallocate(self.fd, mode, offset, len)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -180,7 +95,7 @@ class File(object):
         """
         Returns Stat object for this file.
         """
-        s = Stat()
+        s = api.Stat()
         rc = api.glfs_fstat(self.fd, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
@@ -220,14 +135,15 @@ class File(object):
         else:
             return ret
 
-    def write(self, data):
+    def write(self, data, flags=0):
         # creating a ctypes.c_ubyte buffer to handle converting bytearray
         # to the required C data type
+
         if type(data) is bytearray:
             buf = (ctypes.c_ubyte * len(data)).from_buffer(data)
         else:
             buf = data
-        ret = api.glfs_write(self.fd, buf, len(buf))
+        ret = api.glfs_write(self.fd, buf, len(buf), flags)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -241,14 +157,14 @@ class Dir(object):
         # get yanked out from under us (see comment above File def'n).
         self._api = api
         self.fd = fd
-        self.cursor = ctypes.POINTER(Dirent)()
+        self.cursor = ctypes.POINTER(api.Dirent)()
 
     def __del__(self):
         self._api.glfs_closedir(self.fd)
         self._api = None
 
     def next(self):
-        entry = Dirent()
+        entry = api.Dirent()
         entry.d_reclen = 256
         rc = api.glfs_readdir_r(self.fd, ctypes.byref(entry),
                                 ctypes.byref(self.cursor))
@@ -380,7 +296,7 @@ class Volume(object):
         dir_list = []
         while True:
             ent = d.next()
-            if not isinstance(ent, Dirent):
+            if not isinstance(ent, api.Dirent):
                 break
             name = ent.d_name[:ent.d_reclen]
             if not name in [".", ".."]:
@@ -412,7 +328,7 @@ class Volume(object):
         return xattrs
 
     def lstat(self, path):
-        s = Stat()
+        s = api.Stat()
         rc = api.glfs_lstat(self.fs, path, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
@@ -445,9 +361,11 @@ class Volume(object):
 
     def open(self, path, flags, mode=0777):
         if (os.O_CREAT & flags) == os.O_CREAT:
-            fd = api.glfs_creat(self.fs, path, flags, mode)
+            #Without direct call to _api the functest fails on creat and open.
+
+            fd = api.client.glfs_creat(self.fs, path, flags, mode)
         else:
-            fd = api.glfs_open(self.fs, path, flags)
+            fd = api.client.glfs_open(self.fs, path, flags)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -531,7 +449,7 @@ class Volume(object):
         return ret
 
     def stat(self, path):
-        s = Stat()
+        s = api.Stat()
         rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
@@ -543,7 +461,7 @@ class Volume(object):
         To get status information about the file system that contains the file
         named by the path argument.
         """
-        s = Statvfs()
+        s = api.Statvfs()
         rc = api.glfs_statvfs(self.fs, path, ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
