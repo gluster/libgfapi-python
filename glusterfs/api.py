@@ -213,7 +213,7 @@ glfs_closedir = ctypes.CFUNCTYPE(
 
 
 glfs_mkdir = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p,
-                              ctypes.c_ulong)(('glfs_mkdir', client))
+                              ctypes.c_ushort)(('glfs_mkdir', client))
 
 glfs_opendir = ctypes.CFUNCTYPE(ctypes.c_void_p,
                                 ctypes.c_void_p,

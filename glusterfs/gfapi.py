@@ -335,7 +335,7 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return s
 
-    def makedirs(self, name, mode):
+    def makedirs(self, name, mode=0777):
         """
         Create directories defined in 'name' recursively.
         """
@@ -352,7 +352,7 @@ class Volume(object):
                 return
         self.mkdir(name, mode)
 
-    def mkdir(self, path, mode):
+    def mkdir(self, path, mode=0777):
         ret = api.glfs_mkdir(self.fs, path, mode)
         if ret < 0:
             err = ctypes.get_errno()
