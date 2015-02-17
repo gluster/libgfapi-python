@@ -18,7 +18,7 @@ import os
 import types
 import errno
 
-from glusterfs import gfapi
+from gluster import gfapi
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 

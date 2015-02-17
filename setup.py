@@ -16,7 +16,7 @@
 
 from setuptools import setup
 
-from glusterfs import __canonical_version__ as version
+from gluster import __canonical_version__ as version
 
 
 name = 'gfapi'
@@ -30,7 +30,7 @@ setup(
     author='Red Hat, Inc.',
     author_email='gluster-users@gluster.org',
     url='http://www.gluster.org',
-    packages=['glusterfs', ],
+    packages=['gluster', ],
     test_suite='nose.collector',
     classifiers=[
         'Development Status :: 5 - Production/Stable'

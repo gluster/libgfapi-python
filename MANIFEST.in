@@ -2,7 +2,7 @@ include README.md LICENSE
 include functional_tests.sh unittests.sh
 include test-requirements.txt
 include tox.ini
-recursive-include glusterfs *.py
+recursive-include gluster *.py
 recursive-include test *.py
 include test/test.conf
 graft doc

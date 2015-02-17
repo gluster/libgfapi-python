@@ -17,7 +17,7 @@ import ctypes
 import os
 import stat
 import errno
-from glusterfs import api
+from gluster import api
 
 
 class File(object):
@@ -332,8 +332,8 @@ class Volume(object):
         Return list of entries in a given directory 'path'.
         "." and ".." are not included, and the list is not sorted.
         """
-        d = self.opendir(path)
         dir_list = []
+        d = self.opendir(path)
         while True:
             ent = d.next()
             if not isinstance(ent, api.Dirent):
