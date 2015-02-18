@@ -16,7 +16,6 @@
 import unittest
 import os
 import types
-import loremipsum
 import errno
 
 from glusterfs import gfapi
@@ -100,7 +99,7 @@ class FileOpsTest(unittest.TestCase):
         cls.vol = None
 
     def setUp(self):
-        self.data = loremipsum.get_sentence()
+        self.data = "gluster is awesome"
         self.path = self._testMethodName + ".io"
         with self.vol.open(self.path, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
                            0644) as fd:
@@ -266,7 +265,7 @@ class DirOpsTest(unittest.TestCase):
         cls.testfile = None
 
     def setUp(self):
-        self.data = loremipsum.get_sentence()
+        self.data = "gluster is awesome"
         self.dir_path = self._testMethodName + "_dir"
         self.vol.mkdir(self.dir_path, 0755)
         for x in range(0, 3):
