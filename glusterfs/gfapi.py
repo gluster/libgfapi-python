@@ -177,8 +177,6 @@ class Dir(object):
 
 class Volume(object):
 
-    # Housekeeping functions.
-
     def __init__(self, host, volid, proto="tcp", port=24007):
         # Add a reference so the module-level variable "api" doesn't
         # get yanked out from under us (see comment above File def'n).
@@ -440,6 +438,20 @@ class Volume(object):
             self.rmdir(path)
         except OSError as e:
             onerror(self.rmdir, path, e)
+
+    def setfsuid(self, uid):
+        ret = api.glfs_setfsuid(uid)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
+    def setfsgid(self, gid):
+        ret = api.glfs_setfsgid(gid)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
 
     def setxattr(self, path, key, value, vlen):
         ret = api.glfs_setxattr(self.fs, path, key, value, vlen, 0)

@@ -223,6 +223,12 @@ glfs_rmdir = ctypes.CFUNCTYPE(ctypes.c_int,
                               ctypes.c_void_p,
                               ctypes.c_char_p)(('glfs_rmdir', client))
 
+glfs_setfsuid = ctypes.CFUNCTYPE(ctypes.c_int,
+                                 ctypes.c_uint)(('glfs_setfsuid', client))
+
+glfs_setfsgid = ctypes.CFUNCTYPE(ctypes.c_int,
+                                 ctypes.c_uint)(('glfs_setfsgid', client))
+
 
 # TODO: creat and open fails on test_create_file_already_exists & test_open_file_not_exist functional testing, # noqa
 # when defined via function prototype.. Need to find RCA. For time being, using it from 'api.glfs_' # noqa
