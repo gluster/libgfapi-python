@@ -65,6 +65,19 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    def fchmod(self, mode):
+        """
+        Change this file's mode
+
+        :param mode: new mode
+        :returns: 0 if success, raises OSError if it fails
+        """
+        ret = api.glfs_fchmod(self.fd, mode)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
+
     def fchown(self, uid, gid):
         """
         Change this file's owner and group id
@@ -195,6 +208,20 @@ class Volume(object):
 
     def mount(self):
         return api.glfs_init(self.fs)
+
+    def chmod(self, path, mode):
+        """
+        Change mode of path
+
+        :param path: the item to be modified
+        :mode: new mode
+        :returns: 0 if success, raises OSError if it fails
+        """
+        ret = api.glfs_chmod(self.fs, path, mode)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
 
     def chown(self, path, uid, gid):
         """

@@ -163,6 +163,16 @@ class FileOpsTest(unittest.TestCase):
         except OSError as e:
             self.fail(e.message)
 
+    def test_chmod(self):
+        stat = self.vol.stat(self.path)
+        orig_mode = oct(stat.st_mode & 0777)
+        self.assertEqual(orig_mode, '0644L')
+        ret = self.vol.chmod(self.path, 0600)
+        self.assertEqual(ret, 0)
+        stat = self.vol.stat(self.path)
+        new_mode = oct(stat.st_mode & 0777)
+        self.assertEqual(new_mode, '0600L')
+
     def test_exists(self):
         e = self.vol.exists(self.path)
         self.assertTrue(e)

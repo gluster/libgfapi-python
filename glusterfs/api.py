@@ -126,6 +126,15 @@ glfs_stat = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p,
 glfs_fstat = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(
     Stat))(('glfs_fstat', client))
 
+glfs_chmod = ctypes.CFUNCTYPE(ctypes.c_int,
+                              ctypes.c_void_p,
+                              ctypes.c_char_p,
+                              ctypes.c_ushort)(('glfs_chmod', client))
+
+glfs_fchmod = ctypes.CFUNCTYPE(ctypes.c_int,
+                               ctypes.c_void_p,
+                               ctypes.c_ushort)(('glfs_fchmod', client))
+
 glfs_chown = ctypes.CFUNCTYPE(ctypes.c_int,
                               ctypes.c_void_p,
                               ctypes.c_char_p,

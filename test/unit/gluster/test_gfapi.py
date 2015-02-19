@@ -63,6 +63,21 @@ class TestFile(unittest.TestCase):
     def tearDown(self):
         glusterfs.gfapi.api.glfs_close = self._saved_glfs_close
 
+    def test_fchmod_success(self):
+        mock_glfs_fchmod = Mock()
+        mock_glfs_fchmod.return_value = 0
+
+        with patch("glusterfs.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
+            ret = self.fd.fchmod(0600)
+            self.assertEquals(ret, 0)
+
+    def test_fchmod_fail_exception(self):
+        mock_glfs_fchmod = Mock()
+        mock_glfs_fchmod.return_value = -1
+
+        with patch("glusterfs.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
+            self.assertRaises(OSError, self.fd.fchmod, 0600)
+
     def test_fchown_success(self):
         mock_glfs_fchown = Mock()
         mock_glfs_fchown.return_value = 0
@@ -277,6 +292,21 @@ class TestVolume(unittest.TestCase):
         glusterfs.gfapi.api.glfs_fini = cls._saved_glfs_fini
         glusterfs.gfapi.api.glfs_close = cls._saved_glfs_close
         glusterfs.gfapi.api.glfs_closedir = cls._saved_glfs_closedir
+
+    def test_chmod_success(self):
+        mock_glfs_chmod = Mock()
+        mock_glfs_chmod.return_value = 0
+
+        with patch("glusterfs.gfapi.api.glfs_chmod", mock_glfs_chmod):
+            ret = self.vol.chmod("file.txt", 0600)
+            self.assertEquals(ret, 0)
+
+    def test_chmod_fail_exception(self):
+        mock_glfs_chmod = Mock()
+        mock_glfs_chmod.return_value = -1
+
+        with patch("glusterfs.gfapi.api.glfs_chmod", mock_glfs_chmod):
+            self.assertRaises(OSError, self.vol.chmod, "file.txt", 0600)
 
     def test_chown_success(self):
         mock_glfs_chown = Mock()
