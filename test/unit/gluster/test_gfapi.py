@@ -803,6 +803,36 @@ class TestVolume(unittest.TestCase):
             mock_unlink.assert_called_once_with("dir1/file")
             mock_rmdir.assert_called_with("dir1")
 
+    def test_setfsuid_success(self):
+        mock_glfs_setfsuid = Mock()
+        mock_glfs_setfsuid.return_value = 0
+
+        with patch("glusterfs.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
+            ret = self.vol.setfsuid(1000)
+            self.assertEquals(ret, 0)
+
+    def test_setfsuid_fail(self):
+        mock_glfs_setfsuid = Mock()
+        mock_glfs_setfsuid.return_value = -1
+
+        with patch("glusterfs.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
+            self.assertRaises(OSError, self.vol.setfsuid, 1001)
+
+    def test_setfsgid_success(self):
+        mock_glfs_setfsgid = Mock()
+        mock_glfs_setfsgid.return_value = 0
+
+        with patch("glusterfs.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
+            ret = self.vol.setfsgid(1000)
+            self.assertEquals(ret, 0)
+
+    def test_setfsgid_fail(self):
+        mock_glfs_setfsgid = Mock()
+        mock_glfs_setfsgid.return_value = -1
+
+        with patch("glusterfs.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
+            self.assertRaises(OSError, self.vol.setfsgid, 1001)
+
     def test_setxattr_success(self):
         mock_glfs_setxattr = Mock()
         mock_glfs_setxattr.return_value = 0
