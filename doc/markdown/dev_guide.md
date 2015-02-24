@@ -42,10 +42,10 @@ git config --global user.email "your_email@youremail.com"
 
 ### Download the Source
 
-The source for libgfapi-python is available in Github. To download type:
+The source for libgfapi-python is available in review.gluster.org. To download type:
 
 ```
-git clone https://github.com/gluster/libgfapi-python.git
+git clone https://review.gluster.org/libgfapi-python
 cd libgfapi-python
 ```
 
