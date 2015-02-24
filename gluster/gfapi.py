@@ -14,6 +14,7 @@ import os
 import stat
 import errno
 from gluster import api
+from gluster.exceptions import LibgfapiException
 
 
 class File(object):
@@ -201,22 +202,132 @@ class Dir(object):
 
 class Volume(object):
 
-    def __init__(self, host, volid, proto="tcp", port=24007):
+    def __init__(self, host, volname,
+                 proto="tcp", port=24007, log_file=None, log_level=7):
+        """
+        Create a Volume object instance.
+
+        :param host: Host with glusterd management daemon running.
+        :param volname: Name of GlusterFS volume to be mounted and used.
+        :param proto: Transport protocol to be used to connect to management
+                      daemon. Permitted values are "tcp" and "rdma".
+        :param port: Port number where gluster management daemon is listening.
+        :param log_file: Path to log file. When this is set to None, a new
+                         logfile will be created in default log directory
+                         i.e /var/log/glusterfs
+        :param log_level: Integer specifying the degree of verbosity.
+                          Higher the value, more verbose the logging.
+
+        TODO: Provide an interface where user can specify volfile directly
+        instead of providing host and other details. This is helpful in cases
+        where user wants to load some non default xlator on client side. For
+        example, aux-gfid-mount or mount volume as read-only.
+        """
         # Add a reference so the module-level variable "api" doesn't
         # get yanked out from under us (see comment above File def'n).
         self._api = api
-        self.fs = api.glfs_new(volid)
-        api.glfs_set_volfile_server(self.fs, proto, host, port)
 
-    def __del__(self):
-        self._api.glfs_fini(self.fs)
-        self._api = None
+        self._mounted = False
+        self.fs = None
+        self.log_file = log_file
+        self.log_level = log_level
 
-    def set_logging(self, path, level):
-        api.glfs_set_logging(self.fs, path, level)
+        if None in (volname, host):
+            # TODO: Validate host based on regex for IP/FQDN.
+            raise LibgfapiException("Host and Volume name should not be None.")
+        if proto not in ('tcp', 'rdma'):
+            raise LibgfapiException("Invalid protocol specified.")
+        if not isinstance(port, (int, long)):
+            raise LibgfapiException("Invalid port specified.")
+
+        self.host = host
+        self.volname = volname
+        self.protocol = proto
+        self.port = port
+
+    @property
+    def mounted(self):
+        return self._mounted
 
     def mount(self):
-        return api.glfs_init(self.fs)
+        """
+        Mount a GlusterFS volume for use.
+        """
+        if self.fs and self._mounted:
+            # Already mounted
+            return
+
+        self.fs = api.glfs_new(self.volname)
+        if not self.fs:
+            raise LibgfapiException("glfs_new(%s) failed." % (self.volname))
+
+        ret = api.glfs_set_volfile_server(self.fs, self.protocol,
+                                          self.host, self.port)
+        if ret < 0:
+            # FIXME: For some reason, get_errno() is not able to capture
+            # proper errno. Until then..
+            # https://bugzilla.redhat.com/show_bug.cgi?id=1196161
+            raise LibgfapiException("glfs_set_volfile_server(%s, %s, %s, "
+                                    "%s) failed." % (self.fs, self.protocol,
+                                                     self.host, self.port))
+
+        self.set_logging(self.log_file, self.log_level)
+
+        if self.fs and not self._mounted:
+            ret = api.glfs_init(self.fs)
+            if ret < 0:
+                raise LibgfapiException("glfs_init(%s) failed." % (self.fs))
+            else:
+                self._mounted = True
+
+    def unmount(self):
+        """
+        Unmount a mounted GlusterFS volume.
+
+        Provides users a way to free resources instead of just waiting for
+        python garbage collector to call __del__() at some point later.
+        """
+        if self.fs:
+            ret = self._api.glfs_fini(self.fs)
+            if ret < 0:
+                raise LibgfapiException("glfs_fini(%s) failed." % (self.fs))
+            else:
+                # Succeeded. Protect against multiple unmount() calls.
+                self._mounted = False
+                self.fs = None
+
+    def __del__(self):
+        try:
+            self.unmount()
+        except LibgfapiException:
+            pass
+
+    def set_logging(self, log_file, log_level):
+        """
+        Set logging parameters. Can be invoked either before or after
+        invoking mount().
+
+        When invoked before mount(), the preferred log file and log level
+        choices are recorded and then later enforced internally as part of
+        mount()
+
+        When invoked at any point after mount(), the change in log file
+        and log level is instantaneous.
+
+        :param log_file: Path of log file.
+                         If set to "/dev/null", nothing will be logged.
+                         If set to None, a new logfile will be created in
+                         default log directory (/var/log/glusterfs)
+        :param log_level: Integer specifying the degree of verbosity.
+                          Higher the value, more verbose the logging.
+        """
+        if self.fs:
+            ret = api.glfs_set_logging(self.fs, self.log_file, self.log_level)
+            if ret < 0:
+                raise LibgfapiException("glfs_set_logging(%s, %s) failed." %
+                                        (self.log_file, self.log_level))
+        self.log_file = log_file
+        self.log_level = log_level
 
     def chmod(self, path, mode):
         """

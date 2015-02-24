@@ -15,8 +15,10 @@ import types
 import errno
 
 from gluster import gfapi
+from gluster.exceptions import LibgfapiException
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
+from uuid import uuid4
 
 config = get_test_config()
 if config:
@@ -42,14 +44,10 @@ class BinFileOpsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vol = gfapi.Volume(HOST, VOLNAME)
-        cls.vol.set_logging("/dev/null", 7)
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
             cls.vol.rmtree("/", ignore_errors=True)
-        else:
-            raise Exception("Initializing volume %s:%s failed." %
-                            (HOST, VOLNAME))
 
     @classmethod
     def tearDownClass(cls):
@@ -80,14 +78,10 @@ class FileOpsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vol = gfapi.Volume(HOST, VOLNAME)
-        cls.vol.set_logging("/dev/null", 7)
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
             cls.vol.rmtree("/", ignore_errors=True)
-        else:
-            raise Exception("Initializing volume %s:%s failed." %
-                            (HOST, VOLNAME))
 
     @classmethod
     def tearDownClass(cls):
@@ -253,15 +247,10 @@ class DirOpsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vol = gfapi.Volume(HOST, VOLNAME)
-        cls.vol.set_logging("/dev/null", 7)
-        cls.vol.mount()
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
             cls.vol.rmtree("/", ignore_errors=True)
-        else:
-            raise Exception("Initializing volume %s:%s failed." %
-                            (HOST, VOLNAME))
         cls.testfile = "testfile"
 
     @classmethod
@@ -323,3 +312,69 @@ class DirOpsTest(unittest.TestCase):
         self.vol.rmtree(self.dir_path, True)
         self.assertRaises(OSError, self.vol.lstat, f)
         self.assertRaises(OSError, self.vol.lstat, self.dir_path)
+
+
+class TestVolumeInit(unittest.TestCase):
+
+    def test_mount_unmount_default(self):
+        # Create volume object instance
+        vol = gfapi.Volume(HOST, VOLNAME)
+        # Check attribute init
+        self.assertEqual(vol.log_file, None)
+        self.assertEqual(vol.log_level, 7)
+        self.assertEqual(vol.host, HOST)
+        self.assertEqual(vol.volname, VOLNAME)
+        self.assertEqual(vol.port, 24007)
+        self.assertFalse(vol.mounted)
+        # Mount the volume
+        vol.mount()
+        # Check mounted property
+        self.assertTrue(vol.mounted)
+        # Unmount the volume
+        vol.unmount()
+        # Check mounted property again
+        self.assertFalse(vol.mounted)
+        # Do a double unmount - should not crash or raise exception
+        vol.unmount()
+        self.assertFalse(vol.mounted)
+        # Do a double mount - should not crash or raise exception
+        vol.mount()
+        vol.mount()
+        self.assertTrue(vol.mounted)
+        # Unmount the volume
+        vol.unmount()
+        self.assertFalse(vol.mounted)
+
+    def test_mount_err(self):
+        # Volume does not exist
+        fake_volname = str(uuid4().hex)[:10]
+        vol = gfapi.Volume(HOST, fake_volname)
+        self.assertRaises(LibgfapiException, vol.mount)
+        self.assertFalse(vol.mounted)
+
+        # Invalid host - glfs_set_volfile_server will fail
+        fake_hostname = str(uuid4().hex)[:10]
+        vol = gfapi.Volume(fake_hostname, VOLNAME)
+        self.assertRaises(LibgfapiException, vol.mount)
+        self.assertFalse(vol.mounted)
+
+    def test_set_logging(self):
+        # Create volume object instance
+        vol = gfapi.Volume(HOST, VOLNAME)
+        # Call set_logging before mount()
+        log_file = "/tmp/%s" % (uuid4().hex)
+        vol.set_logging(log_file, 7)
+        # Mount the volume
+        vol.mount()
+        self.assertTrue(vol.mounted)
+        self.assertEqual(vol.log_file, log_file)
+        self.assertEqual(vol.log_level, 7)
+        # Check that log has been created and exists
+        self.assertTrue(os.path.exists(log_file))
+        # Change the logging after mounting
+        log_file2 = "/tmp/%s" % (uuid4().hex)
+        vol.set_logging(log_file2, 7)
+        self.assertEqual(vol.log_file, log_file2)
+        # Unmount the volume
+        vol.unmount()
+        self.assertFalse(vol.mounted)

@@ -17,6 +17,7 @@ import errno
 
 from gluster import gfapi
 from gluster import api
+from gluster.exceptions import LibgfapiException
 from nose import SkipTest
 from mock import Mock, patch
 from contextlib import nested
@@ -31,15 +32,23 @@ def _mock_glfs_closedir(fd):
 
 
 def _mock_glfs_new(volid):
-    return 2
+    return 12345
+
+
+def _mock_glfs_init(fs):
+    return 0
 
 
 def _mock_glfs_set_volfile_server(fs, proto, host, port):
-    return
+    return 0
 
 
 def _mock_glfs_fini(fs):
-    return
+    return 0
+
+
+def _mock_glfs_set_logging(fs, log_file, log_level):
+    return 0
 
 
 class TestFile(unittest.TestCase):
@@ -183,10 +192,10 @@ class TestFile(unittest.TestCase):
             self.assertEqual(buflen, 12345)
             return buflen
 
-        for buflen in (-1,-2,-999):
+        for buflen in (-1, -2, -999):
             with patch("gluster.gfapi.api.glfs_read", _mock_glfs_read):
                 with patch("gluster.gfapi.File.fgetsize", _mock_fgetsize):
-                    b = self.fd.read(buflen)
+                    self.fd.read(buflen)
 
     def test_write_success(self):
         mock_glfs_write = Mock()
@@ -281,6 +290,9 @@ class TestVolume(unittest.TestCase):
         gluster.gfapi.api.glfs_set_volfile_server = \
             _mock_glfs_set_volfile_server
 
+        cls._saved_glfs_init = gluster.gfapi.api.glfs_init
+        gluster.gfapi.api.glfs_init = _mock_glfs_init
+
         cls._saved_glfs_fini = gluster.gfapi.api.glfs_fini
         gluster.gfapi.api.glfs_fini = _mock_glfs_fini
 
@@ -289,7 +301,13 @@ class TestVolume(unittest.TestCase):
 
         cls._saved_glfs_closedir = gluster.gfapi.api.glfs_closedir
         gluster.gfapi.api.glfs_closedir = _mock_glfs_closedir
+
+        cls._saved_glfs_set_logging = gluster.gfapi.api.glfs_set_logging
+        gluster.gfapi.api.glfs_set_logging = _mock_glfs_set_logging
+
         cls.vol = gfapi.Volume("mockhost", "test")
+        cls.vol.fs = 12345
+        cls.vol._mounted = True
 
     @classmethod
     def tearDownClass(cls):
@@ -300,6 +318,101 @@ class TestVolume(unittest.TestCase):
         gluster.gfapi.api.glfs_fini = cls._saved_glfs_fini
         gluster.gfapi.api.glfs_close = cls._saved_glfs_close
         gluster.gfapi.api.glfs_closedir = cls._saved_glfs_closedir
+
+    def test_initialization_error(self):
+        self.assertRaises(LibgfapiException, gfapi.Volume, "host", None)
+        self.assertRaises(LibgfapiException, gfapi.Volume, None, "vol")
+        self.assertRaises(LibgfapiException, gfapi.Volume, None, None)
+        self.assertRaises(LibgfapiException, gfapi.Volume, "host", "vol", "ZZ")
+        self.assertRaises(LibgfapiException, gfapi.Volume, "host", "vol",
+                          "tcp", "invalid_port")
+
+    def test_initialization_success(self):
+        v = gfapi.Volume("host", "vol", "tcp", 9876)
+        self.assertEqual(v.host, "host")
+        self.assertEqual(v.volname, "vol")
+        self.assertEqual(v.protocol, "tcp")
+        self.assertEqual(v.port, 9876)
+        self.assertFalse(v.mounted)
+
+    def test_mount_unmount_success(self):
+        v = gfapi.Volume("host", "vol")
+        v.mount()
+        self.assertTrue(v.mounted)
+        self.assertTrue(v.fs)
+        v.unmount()
+        self.assertFalse(v.mounted)
+        self.assertFalse(v.fs)
+
+    def test_mount_multiple(self):
+        _m_glfs_new = Mock()
+        v = gfapi.Volume("host", "vol")
+        with patch("gluster.gfapi.api.glfs_new", _m_glfs_new):
+            # Mounting for first time
+            v.mount()
+            _m_glfs_new.assert_called_once_with("vol")
+            _m_glfs_new.reset_mock()
+            for i in range(0, 5):
+                v.mount()
+                self.assertFalse(_m_glfs_new.called)
+                self.assertTrue(v.mounted)
+
+    def test_mount_error(self):
+        # glfs_new() failed
+        _m_glfs_new = Mock(return_value=None)
+        v = gfapi.Volume("host", "vol")
+        with patch("gluster.gfapi.api.glfs_new", _m_glfs_new):
+            self.assertRaises(LibgfapiException, v.mount)
+            self.assertFalse(v.fs)
+            self.assertFalse(v.mounted)
+            _m_glfs_new.assert_called_once_with("vol")
+
+        # glfs_set_volfile_server() failed
+        _m_set_vol = Mock(return_value=-1)
+        v = gfapi.Volume("host", "vol")
+        with patch("gluster.gfapi.api.glfs_set_volfile_server", _m_set_vol):
+            self.assertRaises(LibgfapiException, v.mount)
+            self.assertFalse(v.mounted)
+            _m_glfs_new.assert_called_once_with("vol")
+            _m_set_vol.assert_called_once_with(v.fs, v.protocol,
+                                               v.host, v.port)
+
+        # glfs_init() failed
+        _m_glfs_init = Mock(return_value=-1)
+        v = gfapi.Volume("host", "vol")
+        with patch("gluster.gfapi.api.glfs_init", _m_glfs_init):
+            self.assertRaises(LibgfapiException, v.mount)
+            self.assertFalse(v.mounted)
+            _m_glfs_init.assert_caled_once_with(v.fs)
+
+    def test_unmount_error(self):
+        v = gfapi.Volume("host", "vol")
+        v.mount()
+        _m_glfs_fini = Mock(return_value=-1)
+        with patch("gluster.gfapi.api.glfs_fini", _m_glfs_fini):
+            self.assertRaises(LibgfapiException, v.unmount)
+            _m_glfs_fini.assert_called_once_with(v.fs)
+            # Should still be mounted as unmount failed.
+            self.assertTrue(v.mounted)
+
+    def test_set_logging(self):
+        _m_set_logging = Mock()
+
+        # Called after mount()
+        v = gfapi.Volume("host", "vol")
+        with patch("gluster.gfapi.api.glfs_set_logging", _m_set_logging):
+            v.mount()
+            v.set_logging("/path/whatever", 7)
+            self.assertEqual(v.log_file, "/path/whatever")
+            self.assertEqual(v.log_level, 7)
+
+    def test_set_logging_err(self):
+        v = gfapi.Volume("host", "vol")
+        v.fs = 12345
+        _m_set_logging = Mock(return_value=-1)
+        with patch("gluster.gfapi.api.glfs_set_logging", _m_set_logging):
+            self.assertRaises(LibgfapiException, v.set_logging, "/dev/null", 7)
+            _m_set_logging.assert_called_once_with(v.fs, None, 7)
 
     def test_chmod_success(self):
         mock_glfs_chmod = Mock()
@@ -339,7 +452,7 @@ class TestVolume(unittest.TestCase):
             with self.vol.open("file.txt", os.O_CREAT, 0644) as fd:
                 self.assertTrue(isinstance(fd, gfapi.File))
                 self.assertEqual(mock_glfs_creat.call_count, 1)
-                mock_glfs_creat.assert_called_once_with(2,
+                mock_glfs_creat.assert_called_once_with(12345,
                                                         "file.txt",
                                                         os.O_CREAT, 0644)
 
@@ -615,7 +728,7 @@ class TestVolume(unittest.TestCase):
             with self.vol.open("file.txt", os.O_WRONLY) as fd:
                 self.assertTrue(isinstance(fd, gfapi.File))
                 self.assertEqual(mock_glfs_open.call_count, 1)
-                mock_glfs_open.assert_called_once_with(2,
+                mock_glfs_open.assert_called_once_with(12345,
                                                        "file.txt", os.O_WRONLY)
 
     def test_open_with_statement_fail_exception(self):
@@ -637,7 +750,8 @@ class TestVolume(unittest.TestCase):
             fd = self.vol.open("file.txt", os.O_WRONLY)
             self.assertTrue(isinstance(fd, gfapi.File))
             self.assertEqual(mock_glfs_open.call_count, 1)
-            mock_glfs_open.assert_called_once_with(2, "file.txt", os.O_WRONLY)
+            mock_glfs_open.assert_called_once_with(12345, "file.txt",
+                                                   os.O_WRONLY)
 
     def test_open_direct_fail_exception(self):
         mock_glfs_open = Mock()
