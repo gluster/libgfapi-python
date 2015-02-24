@@ -7,7 +7,7 @@ Python bindings for the [GlusterFS](http://www.gluster.org) libgfapi interface
 1) Clone the git repo
 
 ```
-$ git clone https://github.com/gluster/libgfapi-python.git
+$ git clone https://review.gluster.org/libgfapi-python
 $ cd libgfapi-python
 ```
 
