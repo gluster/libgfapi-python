@@ -1,0 +1,15 @@
+
+The intention of this file is not to establish who owns what portions of the
+code base, but to provide a set of names that developers can consult when they
+have a question about a particular subset and also to provide a set of names
+to be CC'd when submitting a patch to obtain appropriate review.
+
+In general, if you have a question about inclusion of a patch, you should
+consult gluster-devel@gluster.org and not any specific individual privately.
+
+
+libgfapi-python Maintainers
+=====================
+Humble Devassy Chirammal <hchiramm@redhat.com>
+Prashanth Pai <ppai@redhat.com>
+Thiago da Silva <thiago@redhat.com>
