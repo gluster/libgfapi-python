@@ -1,17 +1,13 @@
-# Copyright (c) 2012-2014 Red Hat, Inc.
+#  Copyright (c) 2012-2015 Red Hat, Inc.
+#  This file is part of libgfapi-python project
+#  (http://review.gluster.org/#/q/project:libgfapi-python)
+#  which is a subproject of GlusterFS ( www.gluster.org)
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+#  This file is licensed to you under your choice of the GNU Lesser
+#  General Public License, version 3 or any later version (LGPLv3 or
+#  later), or the GNU General Public License, version 2 (GPLv2), in all
+#  cases as published by the Free Software Foundation.
+
 
 import unittest
 import gluster
@@ -67,7 +63,7 @@ class TestFile(unittest.TestCase):
         mock_glfs_fchmod = Mock()
         mock_glfs_fchmod.return_value = 0
 
-        with patch("glusterfs.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
+        with patch("gluster.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
             ret = self.fd.fchmod(0600)
             self.assertEquals(ret, 0)
 
@@ -75,7 +71,7 @@ class TestFile(unittest.TestCase):
         mock_glfs_fchmod = Mock()
         mock_glfs_fchmod.return_value = -1
 
-        with patch("glusterfs.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
+        with patch("gluster.gfapi.api.glfs_fchmod", mock_glfs_fchmod):
             self.assertRaises(OSError, self.fd.fchmod, 0600)
 
     def test_fchown_success(self):
@@ -188,8 +184,8 @@ class TestFile(unittest.TestCase):
             return buflen
 
         for buflen in (-1,-2,-999):
-            with patch("glusterfs.gfapi.api.glfs_read", _mock_glfs_read):
-                with patch("glusterfs.gfapi.File.fgetsize", _mock_fgetsize):
+            with patch("gluster.gfapi.api.glfs_read", _mock_glfs_read):
+                with patch("gluster.gfapi.File.fgetsize", _mock_fgetsize):
                     b = self.fd.read(buflen)
 
     def test_write_success(self):
@@ -309,7 +305,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_chmod = Mock()
         mock_glfs_chmod.return_value = 0
 
-        with patch("glusterfs.gfapi.api.glfs_chmod", mock_glfs_chmod):
+        with patch("gluster.gfapi.api.glfs_chmod", mock_glfs_chmod):
             ret = self.vol.chmod("file.txt", 0600)
             self.assertEquals(ret, 0)
 
@@ -317,7 +313,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_chmod = Mock()
         mock_glfs_chmod.return_value = -1
 
-        with patch("glusterfs.gfapi.api.glfs_chmod", mock_glfs_chmod):
+        with patch("gluster.gfapi.api.glfs_chmod", mock_glfs_chmod):
             self.assertRaises(OSError, self.vol.chmod, "file.txt", 0600)
 
     def test_chown_success(self):
@@ -807,7 +803,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_setfsuid = Mock()
         mock_glfs_setfsuid.return_value = 0
 
-        with patch("glusterfs.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
+        with patch("gluster.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
             ret = self.vol.setfsuid(1000)
             self.assertEquals(ret, 0)
 
@@ -815,14 +811,14 @@ class TestVolume(unittest.TestCase):
         mock_glfs_setfsuid = Mock()
         mock_glfs_setfsuid.return_value = -1
 
-        with patch("glusterfs.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
+        with patch("gluster.gfapi.api.glfs_setfsuid", mock_glfs_setfsuid):
             self.assertRaises(OSError, self.vol.setfsuid, 1001)
 
     def test_setfsgid_success(self):
         mock_glfs_setfsgid = Mock()
         mock_glfs_setfsgid.return_value = 0
 
-        with patch("glusterfs.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
+        with patch("gluster.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
             ret = self.vol.setfsgid(1000)
             self.assertEquals(ret, 0)
 
@@ -830,7 +826,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_setfsgid = Mock()
         mock_glfs_setfsgid.return_value = -1
 
-        with patch("glusterfs.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
+        with patch("gluster.gfapi.api.glfs_setfsgid", mock_glfs_setfsgid):
             self.assertRaises(OSError, self.vol.setfsgid, 1001)
 
     def test_setxattr_success(self):
