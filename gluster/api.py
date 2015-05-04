@@ -13,9 +13,26 @@ import ctypes
 from ctypes.util import find_library
 
 
+# LD_LIBRARY_PATH is not looked up by ctypes.util.find_library()
+so_file_name = find_library("gfapi")
+
+if so_file_name is None:
+    for name in ["libgfapi.so.0", "libgfapi.so"]:
+        try:
+            ctypes.CDLL(name, ctypes.RTLD_GLOBAL, use_errno=True)
+        except OSError:
+            pass
+        else:
+            so_file_name = name
+            break
+    if so_file_name is None:
+        # The .so file cannot be found (or loaded)
+        # May be you need to run ldconfig command
+        raise Exception("libgfapi.so not found")
+
 # Looks like ctypes is having trouble with dependencies, so just force them to
 # load with RTLD_GLOBAL until I figure that out.
-client = ctypes.CDLL(find_library("gfapi"), ctypes.RTLD_GLOBAL, use_errno=True)
+client = ctypes.CDLL(so_file_name, ctypes.RTLD_GLOBAL, use_errno=True)
 # The above statement "may" fail with OSError on some systems if libgfapi.so
 # is located in /usr/local/lib/. This happens when glusterfs is installed from
 # source. Refer to: http://bugs.python.org/issue18502

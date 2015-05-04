@@ -335,7 +335,7 @@ class Volume(object):
             if not isinstance(ent, api.Dirent):
                 break
             name = ent.d_name[:ent.d_reclen]
-            if not name in [".", ".."]:
+            if name not in [".", ".."]:
                 dir_list.append(name)
         return dir_list
 
@@ -397,7 +397,8 @@ class Volume(object):
 
     def open(self, path, flags, mode=0777):
         if (os.O_CREAT & flags) == os.O_CREAT:
-            #Without direct call to _api the functest fails on creat and open.
+            # FIXME:
+            # Without direct call to _api the functest fails on creat and open.
 
             fd = api.client.glfs_creat(self.fs, path, flags, mode)
         else:
