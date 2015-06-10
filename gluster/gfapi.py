@@ -16,12 +16,35 @@ import errno
 from gluster import api
 from gluster.exceptions import LibgfapiException
 
+# TODO: Move this utils.py
+python_mode_to_os_flags = {}
+
+
+def _populate_mode_to_flags_dict():
+    # http://pubs.opengroup.org/onlinepubs/9699919799/functions/fopen.html
+    for mode in ['r', 'rb']:
+        python_mode_to_os_flags[mode] = os.O_RDONLY
+    for mode in ['w', 'wb']:
+        python_mode_to_os_flags[mode] = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    for mode in ['a', 'ab']:
+        python_mode_to_os_flags[mode] = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    for mode in ['r+', 'rb+', 'r+b']:
+        python_mode_to_os_flags[mode] = os.O_RDWR
+    for mode in ['w+', 'wb+', 'w+b']:
+        python_mode_to_os_flags[mode] = os.O_RDWR | os.O_CREAT | os.O_TRUNC
+    for mode in ['a+', 'ab+', 'a+b']:
+        python_mode_to_os_flags[mode] = os.O_RDWR | os.O_CREAT | os.O_APPEND
+
+_populate_mode_to_flags_dict()
+
 
 class File(object):
 
-    def __init__(self, fd, path=None):
+    def __init__(self, fd, path=None, mode=None):
         self.fd = fd
         self.originalpath = path
+        self._mode = mode
+        self._closed = False
 
     def __enter__(self):
         if self.fd is None:
@@ -34,19 +57,40 @@ class File(object):
     def __exit__(self, type, value, tb):
         self.close()
 
+    @property
+    def fileno(self):
+        # TODO: Make self.fd private (self._fd)
+        return self.fd
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @property
+    def name(self):
+        return self.originalpath
+
+    @property
+    def closed(self):
+        return self._closed
+
     def close(self):
-        ret = api.glfs_close(self.fd)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
-        return ret
+        """
+        Close the file. A closed file cannot be read or written any more.
+        Calling close() more than once is allowed.
+        """
+        if not self._closed:
+            ret = api.glfs_close(self.fd)
+            if ret < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+            self._closed = True
 
     def discard(self, offset, len):
         ret = api.client.glfs_discard(self.fd, offset, len)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def dup(self):
         dupfd = api.glfs_dup(self.fd)
@@ -55,25 +99,33 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return File(dupfd, self.originalpath)
 
-    def fallocate(self, mode, offset, len):
-        ret = api.client.glfs_fallocate(self.fd, mode, offset, len)
+    def fallocate(self, mode, offset, length):
+        """
+        This is a Linux-specific sys call, unlike posix_fallocate()
+
+        Allows the caller to directly manipulate the allocated disk space for
+        the file for the byte range starting at offset and continuing for
+        length bytes.
+
+        :param mode: Operation to be performed on the given range
+        :param offset: Starting offset
+        :param length: Size in bytes, starting at offset
+        """
+        ret = api.client.glfs_fallocate(self.fd, mode, offset, length)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def fchmod(self, mode):
         """
         Change this file's mode
 
         :param mode: new mode
-        :returns: 0 if success, raises OSError if it fails
         """
         ret = api.glfs_fchmod(self.fd, mode)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def fchown(self, uid, gid):
         """
@@ -81,35 +133,129 @@ class File(object):
 
         :param uid: new user id for file
         :param gid: new group id for file
-        :returns: 0 if success, raises OSError if it fails
         """
         ret = api.glfs_fchown(self.fd, uid, gid)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def fdatasync(self):
         """
-        Force write of file
-
-        :returns: 0 if success, raises OSError if it fails
+        Flush buffer cache pages pertaining to data, but not the ones
+        pertaining to metadata.
         """
         ret = api.glfs_fdatasync(self.fd)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def fgetsize(self):
         """
-        Return the size of a file, reported by fstat()
+        Return the size of a file, as reported by fstat()
+
+        :returns: the size of the file in bytes
         """
         return self.fstat().st_size
+
+    def fgetxattr(self, key, size=0):
+        """
+        Retrieve the value of the extended attribute identified by key
+        for the file.
+
+        :param key: Key of extended attribute
+        :param size: If size is specified as zero, we first determine the
+                     size of xattr and then allocate a buffer accordingly.
+                     If size is non-zero, it is assumed the caller knows
+                     the size of xattr.
+        :returns: Value of extended attribute corresponding to key specified.
+        """
+        if size == 0:
+            size = api.glfs_fgetxattr(self.fd, key, None, size)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+
+        buf = ctypes.create_string_buffer(size)
+        rc = api.glfs_fgetxattr(self.fd, key, buf, size)
+        if rc < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return buf.value[:rc]
+
+    def flistxattr(self, size=0):
+        """
+        Retrieve list of extended attributes for the file.
+
+        :param size: If size is specified as zero, we first determine the
+                     size of list and then allocate a buffer accordingly.
+                     If size is non-zero, it is assumed the caller knows
+                     the size of the list.
+        :returns: List of extended attributes.
+        """
+        if size == 0:
+            size = api.glfs_flistxattr(self.fd, None, 0)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+
+        buf = ctypes.create_string_buffer(size)
+        rc = api.glfs_flistxattr(self.fd, buf, size)
+        if rc < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        xattrs = []
+        # Parsing character by character is ugly, but it seems like the
+        # easiest way to deal with the "strings separated by NUL in one
+        # buffer" format.
+        i = 0
+        while i < rc:
+            new_xa = buf.raw[i]
+            i += 1
+            while i < rc:
+                next_char = buf.raw[i]
+                i += 1
+                if next_char == '\0':
+                    xattrs.append(new_xa)
+                    break
+                new_xa += next_char
+        xattrs.sort()
+        return xattrs
+
+    def fsetxattr(self, key, value, flags=0):
+        """
+        Set extended attribute of file.
+
+        :param key: The key of extended attribute.
+        :param value: The valiue of extended attribute.
+        :param flags: Possible values are 0 (default), 1 and 2
+                      0: xattr will be created if it does not exist, or the
+                         value will be replaced if the xattr exists.
+                      1: Perform a pure create, which fails if the named
+                         attribute already exists.
+                      2: Perform a pure replace operation, which fails if the
+                         named attribute does not already exist.
+        """
+        ret = api.glfs_fsetxattr(self.fd, key, value, len(value), flags)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
+    def fremovexattr(self, key):
+        """
+        Remove a extended attribute of the file.
+
+        :param key: The key of extended attribute.
+        """
+        ret = api.glfs_fremovexattr(self.fd, key)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
 
     def fstat(self):
         """
         Returns Stat object for this file.
+
+        :return: Returns the stat information of the file.
         """
         s = api.Stat()
         rc = api.glfs_fstat(self.fd, ctypes.byref(s))
@@ -119,11 +265,28 @@ class File(object):
         return s
 
     def fsync(self):
+        """
+        Flush buffer cache pages pertaining to data and metadata.
+        """
         ret = api.glfs_fsync(self.fd)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
+
+    def ftruncate(self, length):
+        """
+        Truncated the file to a size of length bytes.
+
+        If the file previously was larger than this size, the extra data is
+        lost. If the file previously was shorter, it is extended, and the
+        extended part reads as null bytes.
+
+        :param length: Length to truncate the file to in bytes.
+        """
+        ret = api.glfs_ftruncate(self.fd, length)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
 
     def lseek(self, pos, how):
         """
@@ -136,31 +299,38 @@ class File(object):
                     to the current position and SEEK_END sets the position
                     relative to the end of the file.
         :returns: the new offset position
-
         """
-        return api.glfs_lseek(self.fd, pos, how)
+        ret = api.glfs_lseek(self.fd, pos, how)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return ret
 
-    def read(self, buflen=-1):
+    def read(self, size=-1):
         """
-        read file
+        Read at most size bytes from the file.
 
         :param buflen: length of read buffer. If less than 0, then whole
                        file is read. Default is -1.
-        :returns: buffer of size buflen
+        :returns: buffer of 'size' length
         """
-        if buflen < 0:
-            buflen = self.fgetsize()
-        rbuf = ctypes.create_string_buffer(buflen)
-        ret = api.glfs_read(self.fd, rbuf, buflen, 0)
+        if size < 0:
+            size = self.fgetsize()
+        rbuf = ctypes.create_string_buffer(size)
+        ret = api.glfs_read(self.fd, rbuf, size, 0)
         if ret > 0:
             return rbuf
         elif ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        else:
-            return ret
 
     def write(self, data, flags=0):
+        """
+        Write data to the file.
+
+        :param data: The data to be written to file.
+        :returns: The size in bytes actually written
+        """
         # creating a ctypes.c_ubyte buffer to handle converting bytearray
         # to the required C data type
 
@@ -341,7 +511,6 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def chown(self, path, uid, gid):
         """
@@ -356,7 +525,6 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def exists(self, path):
         """
@@ -504,9 +672,52 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
+
+    def fopen(self, path, mode='r'):
+        """
+        Similar to Python's built-in File object returned by Python's open()
+
+        Unlike Python's open(), fopen() provided here is only for convenience
+        and it does NOT invoke glibc's fopen and does NOT do any kind of
+        I/O bufferring as of today.
+
+        :param path: Path of file to be opened
+        :param mode: Mode to open the file with. This is a string.
+        :returns: an instance of File class
+        """
+        if not isinstance(mode, basestring):
+            raise TypeError("Mode must be a string")
+        try:
+            flags = python_mode_to_os_flags[mode]
+        except KeyError:
+            raise ValueError("Invalid mode")
+        else:
+            if (os.O_CREAT & flags) == os.O_CREAT:
+                fd = api.client.glfs_creat(self.fs, path, flags, 0666)
+            else:
+                fd = api.client.glfs_open(self.fs, path, flags)
+            if not fd:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+            return File(fd, path=path, mode=mode)
 
     def open(self, path, flags, mode=0777):
+        """
+        Similar to Python's os.open()
+
+        As of today, the only way to consume the raw glfd returned is by
+        passing it to File class.
+
+        :param path: Path of file to be opened
+        :param flags: Integer which flags must include one of the following
+                      access modes: os.O_RDONLY, os.O_WRONLY, or os.O_RDWR.
+        :param mode: specifies the permissions to use in case a new
+                     file is created.
+        :returns: the raw glfd
+        """
+        if not isinstance(flags, int):
+            raise TypeError("flags must evaluate to an integer")
+
         if (os.O_CREAT & flags) == os.O_CREAT:
             # FIXME:
             # Without direct call to _api the functest fails on creat and open.
@@ -518,7 +729,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
-        return File(fd, path)
+        return fd
 
     def opendir(self, path):
         fd = api.glfs_opendir(self.fs, path)
@@ -532,21 +743,18 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise IOError(err, os.strerror(err))
-        return ret
 
     def rename(self, opath, npath):
         ret = api.glfs_rename(self.fs, opath, npath)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def rmdir(self, path):
         ret = api.glfs_rmdir(self.fs, path)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def rmtree(self, path, ignore_errors=False, onerror=None):
         """
@@ -594,21 +802,18 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def setfsgid(self, gid):
         ret = api.glfs_setfsgid(gid)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def setxattr(self, path, key, value, vlen):
         ret = api.glfs_setxattr(self.fs, path, key, value, vlen, 0)
         if ret < 0:
             err = ctypes.get_errno()
             raise IOError(err, os.strerror(err))
-        return ret
 
     def stat(self, path):
         s = api.Stat()
@@ -638,7 +843,6 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def unlink(self, path):
         """
@@ -651,7 +855,6 @@ class Volume(object):
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return ret
 
     def walk(self, top, topdown=True, onerror=None, followlinks=False):
         """

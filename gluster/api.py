@@ -396,6 +396,34 @@ glfs_setfsuid = ctypes.CFUNCTYPE(ctypes.c_int,
 glfs_setfsgid = ctypes.CFUNCTYPE(ctypes.c_int,
                                  ctypes.c_uint)(('glfs_setfsgid', client))
 
+glfs_ftruncate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p,
+                                  ctypes.c_int)(('glfs_ftruncate', client))
+
+glfs_fgetxattr = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
+                                  ctypes.c_void_p,
+                                  ctypes.c_char_p,
+                                  ctypes.c_void_p,
+                                  ctypes.c_size_t)(('glfs_fgetxattr', client))
+
+glfs_fremovexattr = ctypes.CFUNCTYPE(ctypes.c_int,
+                                     ctypes.c_void_p,
+                                     ctypes.c_char_p)(('glfs_fremovexattr',
+                                                      client))
+
+glfs_fsetxattr = ctypes.CFUNCTYPE(ctypes.c_int,
+                                  ctypes.c_void_p,
+                                  ctypes.c_char_p,
+                                  ctypes.c_void_p,
+                                  ctypes.c_size_t,
+                                  ctypes.c_int)(('glfs_fsetxattr', client))
+
+glfs_flistxattr = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
+                                   ctypes.c_void_p,
+                                   ctypes.c_void_p,
+                                   ctypes.c_size_t)(('glfs_flistxattr',
+                                                    client))
+
+
 
 # TODO: creat and open fails on test_create_file_already_exists & test_open_file_not_exist functional testing, # noqa
 # when defined via function prototype.. Need to find RCA. For time being, using it from 'api.glfs_' # noqa

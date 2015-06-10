@@ -14,7 +14,7 @@ import os
 import types
 import errno
 
-from gluster import gfapi
+from gluster.gfapi import File, Volume
 from gluster.exceptions import LibgfapiException
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
@@ -43,7 +43,7 @@ class BinFileOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume(HOST, VOLNAME)
+        cls.vol = Volume(HOST, VOLNAME)
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
@@ -57,14 +57,14 @@ class BinFileOpsTest(unittest.TestCase):
     def setUp(self):
         self.data = bytearray([(k % 128) for k in range(0, 1024)])
         self.path = self._testMethodName + ".io"
-        with self.vol.open(self.path, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
-                           0644) as fd:
-            fd.write(self.data)
+        with File(self.vol.open(self.path,
+                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644)) as f:
+            f.write(self.data)
 
     def test_bin_open_and_read(self):
-        with self.vol.open(self.path, os.O_RDONLY) as fd:
-            self.assertTrue(isinstance(fd, gfapi.File))
-            buf = fd.read(len(self.data))
+        with File(self.vol.open(self.path, os.O_RDONLY)) as f:
+            self.assertTrue(isinstance(f, File))
+            buf = f.read(len(self.data))
             self.assertFalse(isinstance(buf, types.IntType))
             self.assertEqual(buf, self.data)
 
@@ -77,7 +77,7 @@ class FileOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume(HOST, VOLNAME)
+        cls.vol = Volume(HOST, VOLNAME)
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
@@ -91,39 +91,117 @@ class FileOpsTest(unittest.TestCase):
     def setUp(self):
         self.data = "gluster is awesome"
         self.path = self._testMethodName + ".io"
-        with self.vol.open(self.path, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
-                           0644) as fd:
-            rc = fd.write(self.data)
+        with File(self.vol.open(self.path,
+                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644),
+                  path=self.path) as f:
+            rc = f.write(self.data)
             self.assertEqual(rc, len(self.data))
-            ret = fd.fsync()
-            self.assertEqual(ret, 0)
-            self.assertEqual(fd.originalpath, self.path)
+            f.fsync()
+            self.assertEqual(f.originalpath, self.path)
 
     def tearDown(self):
         self.path = None
         self.data = None
 
     def test_open_and_read(self):
-        with self.vol.open(self.path, os.O_RDONLY) as fd:
-            self.assertTrue(isinstance(fd, gfapi.File))
-            buf = fd.read(len(self.data))
+        with File(self.vol.open(self.path, os.O_RDONLY)) as f:
+            self.assertTrue(isinstance(f, File))
+            buf = f.read(len(self.data))
             self.assertFalse(isinstance(buf, types.IntType))
             self.assertEqual(buf.value, self.data)
 
     def test_open_file_not_exist(self):
         try:
-            f = self.vol.open("filenotexist", os.O_WRONLY)
+            f = File(self.vol.open("filenotexist", os.O_WRONLY))
         except OSError as e:
             self.assertEqual(e.errno, errno.ENOENT)
         else:
             f.close()
             self.fail("Expected a OSError with errno.ENOENT")
 
+    def test_open_err(self):
+        # flags not int
+        self.assertRaises(TypeError, self.vol.open, "file", 'w')
+        # invalid flags
+        self.assertRaises(OSError, self.vol.open, "file",
+                          12345)
+
+    def test_fopen_err(self):
+        # mode not string
+        self.assertRaises(TypeError, self.vol.fopen, "file", os.O_WRONLY)
+        # invalid mode
+        self.assertRaises(ValueError, self.vol.fopen, "file", 'x+')
+        # file does not exist
+        self.assertRaises(OSError, self.vol.fopen, "file", 'r')
+
+    def test_fopen(self):
+        # Default permission should be 0666
+        name = uuid4().hex
+        data = "Gluster is so awesome"
+        with self.vol.fopen(name, 'w') as f:
+            f.write(data)
+        perms = self.vol.stat(name).st_mode & 0777
+        self.assertEqual(perms, int(0666))
+
+        # 'r': Open file for reading.
+        # If not specified, mode should default to 'r'
+        with self.vol.fopen(name) as f:
+            self.assertEqual('r', f.mode)
+            self.assertEqual(f.lseek(0, os.SEEK_CUR), 0)
+            self.assertEqual(f.read().value, data)
+
+        # 'r+': Open for reading and writing.
+        with self.vol.fopen(name, 'r+') as f:
+            self.assertEqual(f.lseek(0, os.SEEK_CUR), 0)
+            self.assertEqual('r+', f.mode)
+            # ftruncate doesn't (and shouldn't) change offset
+            f.ftruncate(0)
+            # writes should pass
+            f.write(data)
+            f.lseek(0, os.SEEK_SET)
+            self.assertEqual(f.read().value, data)
+
+        # 'w': Truncate file to zero length or create text file for writing.
+        self.assertEqual(self.vol.getsize(name), len(data))
+        with self.vol.fopen(name, 'w') as f:
+            self.assertEqual('w', f.mode)
+            f.fsync()
+            self.assertEqual(self.vol.getsize(name), 0)
+            f.write(data)
+
+        # 'w+': Open for reading and writing.  The file is created if it does
+        # not exist, otherwise it is truncated.
+        with self.vol.fopen(name, 'w+') as f:
+            self.assertEqual('w+', f.mode)
+            f.fsync()
+            self.assertEqual(self.vol.getsize(name), 0)
+            f.write(data)
+            f.lseek(0, os.SEEK_SET)
+            self.assertEqual(f.read().value, data)
+
+        # 'a': Open for appending (writing at end of file).  The file is
+        # created if it does not exist.
+        with self.vol.fopen(name, 'a') as f:
+            self.assertEqual('a', f.mode)
+            # This should be appended at the end
+            f.write("hello")
+        with self.vol.fopen(name) as f:
+            self.assertEqual(f.read().value, data + "hello")
+
+        # 'a+': Open for reading and appending (writing at end of file)
+        with self.vol.fopen(name, 'a+') as f:
+            self.assertEqual('a+', f.mode)
+            # This should be appended at the end
+            f.write(" world")
+            f.fsync()
+            f.lseek(0, os.SEEK_SET)
+            self.assertEqual(f.read().value, data + "hello world")
+
     def test_create_file_already_exists(self):
         try:
-            f = self.vol.open("newfile", os.O_CREAT)
+            f = File(self.vol.open("newfile", os.O_CREAT))
             f.close()
-            g = self.vol.open("newfile", os.O_CREAT | os.O_EXCL)
+            g = File(self.vol.open("newfile", os.O_CREAT | os.O_EXCL))
         except OSError as e:
             self.assertEqual(e.errno, errno.EEXIST)
         else:
@@ -132,10 +210,10 @@ class FileOpsTest(unittest.TestCase):
 
     def test_write_file_dup_lseek_read(self):
         try:
-            f = self.vol.open("dune", os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            f = File(self.vol.open("dune", os.O_CREAT | os.O_EXCL | os.O_RDWR))
             f.write("I must not fear. Fear is the mind-killer.")
             fdup = f.dup()
-            self.assertTrue(isinstance(fdup, gfapi.File))
+            self.assertTrue(isinstance(fdup, File))
             f.close()
             ret = fdup.lseek(0, os.SEEK_SET)
             self.assertEqual(ret, 0)
@@ -157,8 +235,7 @@ class FileOpsTest(unittest.TestCase):
         stat = self.vol.stat(self.path)
         orig_mode = oct(stat.st_mode & 0777)
         self.assertEqual(orig_mode, '0644L')
-        ret = self.vol.chmod(self.path, 0600)
-        self.assertEqual(ret, 0)
+        self.vol.chmod(self.path, 0600)
         stat = self.vol.stat(self.path)
         new_mode = oct(stat.st_mode & 0777)
         self.assertEqual(new_mode, '0600L')
@@ -185,8 +262,7 @@ class FileOpsTest(unittest.TestCase):
 
     def test_symlink(self):
         link = self._testMethodName + ".link"
-        ret = self.vol.symlink(self.path, link)
-        self.assertEqual(ret, 0)
+        self.vol.symlink(self.path, link)
         islink = self.vol.islink(link)
         self.assertTrue(islink)
 
@@ -201,8 +277,7 @@ class FileOpsTest(unittest.TestCase):
 
     def test_rename(self):
         newpath = self.path + ".rename"
-        ret = self.vol.rename(self.path, newpath)
-        self.assertEqual(ret, 0)
+        self.vol.rename(self.path, newpath)
         self.assertRaises(OSError, self.vol.lstat, self.path)
 
     def test_stat(self):
@@ -211,16 +286,13 @@ class FileOpsTest(unittest.TestCase):
         self.assertEqual(sb.st_size, len(self.data))
 
     def test_unlink(self):
-        ret = self.vol.unlink(self.path)
-        self.assertEqual(ret, 0)
+        self.vol.unlink(self.path)
         self.assertRaises(OSError, self.vol.lstat, self.path)
 
     def test_xattr(self):
         key1, key2 = "hello", "world"
-        ret1 = self.vol.setxattr(self.path, "trusted.key1", key1, len(key1))
-        self.assertEqual(ret1, 0)
-        ret2 = self.vol.setxattr(self.path, "trusted.key2", key2, len(key2))
-        self.assertEqual(ret2, 0)
+        self.vol.setxattr(self.path, "trusted.key1", key1, len(key1))
+        self.vol.setxattr(self.path, "trusted.key2", key2, len(key2))
 
         xattrs = self.vol.listxattr(self.path)
         self.assertFalse(isinstance(xattrs, types.IntType))
@@ -230,12 +302,78 @@ class FileOpsTest(unittest.TestCase):
         self.assertFalse(isinstance(buf, types.IntType))
         self.assertEqual(buf, "hello")
 
-        ret3 = self.vol.removexattr(self.path, "trusted.key1")
-        self.assertEqual(ret3, 0)
+        self.vol.removexattr(self.path, "trusted.key1")
 
         xattrs = self.vol.listxattr(self.path)
         self.assertFalse(isinstance(xattrs, types.IntType))
         self.assertTrue(["trusted.key1"] not in xattrs)
+
+    def test_fsetxattr(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.fsetxattr("user.gluster", "awesome")
+            self.assertEqual(f.fgetxattr("user.gluster"), "awesome")
+            # flag = 1 behavior: fail if xattr exists
+            self.assertRaises(OSError, f.fsetxattr, "user.gluster",
+                              "more awesome", flags=1)
+            # flag = 1 behavior: pass if xattr does not exist
+            f.fsetxattr("user.gluster2", "awesome2", flags=1)
+            self.assertEqual(f.fgetxattr("user.gluster2"), "awesome2")
+            # flag = 2 behavior: fail if xattr does not exist
+            self.assertRaises(OSError, f.fsetxattr, "user.whatever",
+                              "awesome", flags=2)
+            # flag = 2 behavior: pass if xattr exists
+            f.fsetxattr("user.gluster", "more awesome", flags=2)
+            self.assertEqual(f.fgetxattr("user.gluster"), "more awesome")
+
+    def test_fremovexattr(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.fsetxattr("user.gluster", "awesome")
+            f.fremovexattr("user.gluster")
+            # The xattr now shouldn't exist
+            self.assertRaises(OSError, f.fgetxattr, "user.gluster")
+            # Removing an xattr that does not exist
+            self.assertRaises(OSError, f.fremovexattr, "user.gluster")
+
+    def test_fgetxattr(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.fsetxattr("user.gluster", "awesome")
+            # user does not know the size of value beforehand
+            self.assertEqual(f.fgetxattr("user.gluster"), "awesome")
+            # user knows the size of value beforehand
+            self.assertEqual(f.fgetxattr("user.gluster", 7), "awesome")
+
+    def test_ftruncate(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.write("123456789")
+            f.ftruncate(5)
+            f.fsync()
+        with File(self.vol.open(name, os.O_RDONLY)) as f:
+            # The size should be reduced
+            self.assertEqual(f.fgetsize(), 5)
+            # So should be the content.
+            self.assertEqual(f.read().value, "12345")
+
+    def test_flistxattr(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_RDWR | os.O_CREAT)) as f:
+            f.fsetxattr("user.gluster", "awesome")
+            f.fsetxattr("user.gluster2", "awesome2")
+            xattrs = f.flistxattr()
+            self.assertTrue("user.gluster" in xattrs)
+            self.assertTrue("user.gluster2" in xattrs)
+            # Test passing of size
+            # larger size - should pass
+            xattrs = f.flistxattr(size=512)
+            self.assertTrue("user.gluster" in xattrs)
+            self.assertTrue("user.gluster2" in xattrs)
+            # smaller size - should fail
+            self.assertRaises(OSError, f.flistxattr, size=1)
+            # invalid size - should fail
+            self.assertRaises(ValueError, f.flistxattr, size=-1)
 
 
 class DirOpsTest(unittest.TestCase):
@@ -246,7 +384,7 @@ class DirOpsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.vol = gfapi.Volume(HOST, VOLNAME)
+        cls.vol = Volume(HOST, VOLNAME)
         ret = cls.vol.mount()
         if ret == 0:
             # Cleanup volume
@@ -265,12 +403,11 @@ class DirOpsTest(unittest.TestCase):
         self.vol.mkdir(self.dir_path, 0755)
         for x in range(0, 3):
             f = os.path.join(self.dir_path, self.testfile + str(x))
-            with self.vol.open(f, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
-                               0644) as fd:
-                rc = fd.write(self.data)
+            with File(self.vol.open(f, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
+                      0644)) as f:
+                rc = f.write(self.data)
                 self.assertEqual(rc, len(self.data))
-                ret = fd.fdatasync()
-                self.assertEqual(ret, 0)
+                f.fdatasync()
 
     def tearDown(self):
         self.dir_path = None
@@ -318,7 +455,7 @@ class TestVolumeInit(unittest.TestCase):
 
     def test_mount_unmount_default(self):
         # Create volume object instance
-        vol = gfapi.Volume(HOST, VOLNAME)
+        vol = Volume(HOST, VOLNAME)
         # Check attribute init
         self.assertEqual(vol.log_file, None)
         self.assertEqual(vol.log_level, 7)
@@ -348,19 +485,19 @@ class TestVolumeInit(unittest.TestCase):
     def test_mount_err(self):
         # Volume does not exist
         fake_volname = str(uuid4().hex)[:10]
-        vol = gfapi.Volume(HOST, fake_volname)
+        vol = Volume(HOST, fake_volname)
         self.assertRaises(LibgfapiException, vol.mount)
         self.assertFalse(vol.mounted)
 
         # Invalid host - glfs_set_volfile_server will fail
         fake_hostname = str(uuid4().hex)[:10]
-        vol = gfapi.Volume(fake_hostname, VOLNAME)
+        vol = Volume(fake_hostname, VOLNAME)
         self.assertRaises(LibgfapiException, vol.mount)
         self.assertFalse(vol.mounted)
 
     def test_set_logging(self):
         # Create volume object instance
-        vol = gfapi.Volume(HOST, VOLNAME)
+        vol = Volume(HOST, VOLNAME)
         # Call set_logging before mount()
         log_file = "/tmp/%s" % (uuid4().hex)
         vol.set_logging(log_file, 7)
