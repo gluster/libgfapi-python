@@ -289,24 +289,72 @@ class FileOpsTest(unittest.TestCase):
         self.vol.unlink(self.path)
         self.assertRaises(OSError, self.vol.lstat, self.path)
 
-    def test_xattr(self):
-        key1, key2 = "hello", "world"
-        self.vol.setxattr(self.path, "trusted.key1", key1, len(key1))
-        self.vol.setxattr(self.path, "trusted.key2", key2, len(key2))
+    def test_setxattr(self):
+        value = "hello world"
+        self.vol.setxattr(self.path, "trusted.key1", value)
+        self.assertEqual(self.vol.getxattr(self.path, "trusted.key1"),
+                         value)
 
+        # flag = 1 behavior: fail if xattr exists
+        self.assertRaises(OSError, self.vol.setxattr, self.path,
+                          "trusted.key1", "whatever", flags=1)
+        # flag = 1 behavior: pass if xattr does not exist
+        self.vol.setxattr(self.path, "trusted.key2", "awesome", flags=1)
+        self.assertEqual(self.vol.getxattr(self.path, "trusted.key2"),
+                         "awesome")
+
+        # flag = 2 behavior: fail if xattr does not exist
+        self.assertRaises(OSError, self.vol.setxattr, self.path,
+                          "trusted.key3", "whatever", flags=2)
+        # flag = 2 behavior: pass if xattr exists
+        self.vol.setxattr(self.path, "trusted.key2",
+                          "more awesome", flags=2)
+        self.assertEqual(self.vol.getxattr(self.path, "trusted.key2"),
+                         "more awesome")
+
+    def test_getxattr(self):
+        self.vol.setxattr(self.path, "user.gluster", "awesome")
+        # user does not know the size of value beforehand
+        self.assertEqual(self.vol.getxattr(self.path, "user.gluster"),
+                         "awesome")
+        # user knows the size of value beforehand
+        self.assertEqual(self.vol.getxattr(self.path, "user.gluster", size=7),
+                         "awesome")
+        # size is larger
+        self.assertEqual(self.vol.getxattr(self.path, "user.gluster", size=20),
+                         "awesome")
+        # size is smaller
+        self.assertRaises(OSError, self.vol.getxattr, self.path,
+                          "user.gluster", size=1)
+        # size is negative
+        self.assertRaises(ValueError, self.vol.getxattr, self.path,
+                          "user.gluster", size=-7)
+
+    def test_listxattr(self):
+        self.vol.setxattr(self.path, "user.gluster", "awesome")
+        self.vol.setxattr(self.path, "user.gluster2", "awesome2")
         xattrs = self.vol.listxattr(self.path)
-        self.assertFalse(isinstance(xattrs, types.IntType))
-        self.assertTrue(set(["trusted.key1", "trusted.key2"]) <= set(xattrs))
+        self.assertTrue("user.gluster" in xattrs)
+        self.assertTrue("user.gluster2" in xattrs)
+        # Test passing of size
+        # larger size - should pass
+        xattrs = self.vol.listxattr(self.path, size=512)
+        self.assertTrue("user.gluster" in xattrs)
+        self.assertTrue("user.gluster2" in xattrs)
+        # smaller size - should fail
+        self.assertRaises(OSError, self.vol.listxattr, self.path, size=1)
+        # invalid size - should fail
+        self.assertRaises(ValueError, self.vol.listxattr, self.path, size=-1)
 
-        buf = self.vol.getxattr(self.path, "trusted.key1", 32)
-        self.assertFalse(isinstance(buf, types.IntType))
-        self.assertEqual(buf, "hello")
-
-        self.vol.removexattr(self.path, "trusted.key1")
-
-        xattrs = self.vol.listxattr(self.path)
-        self.assertFalse(isinstance(xattrs, types.IntType))
-        self.assertTrue(["trusted.key1"] not in xattrs)
+    def test_removexattr(self):
+        self.vol.setxattr(self.path, "user.gluster", "awesome")
+        self.vol.removexattr(self.path, "user.gluster")
+        # The xattr now shouldn't exist
+        self.assertRaises(OSError, self.vol.getxattr,
+                          self.path, "user.gluster")
+        # Removing an xattr that does not exist
+        self.assertRaises(OSError, self.vol.removexattr,
+                          self.path, "user.gluster")
 
     def test_fsetxattr(self):
         name = uuid4().hex
@@ -344,6 +392,14 @@ class FileOpsTest(unittest.TestCase):
             self.assertEqual(f.fgetxattr("user.gluster"), "awesome")
             # user knows the size of value beforehand
             self.assertEqual(f.fgetxattr("user.gluster", 7), "awesome")
+            # size is larger
+            self.assertEqual(f.fgetxattr("user.gluster", 70), "awesome")
+            # size is smaller
+            self.assertRaises(OSError, f.fgetxattr,
+                              "user.gluster", size=1)
+            # size is negative
+            self.assertRaises(ValueError, f.fgetxattr,
+                              "user.gluster", size=-7)
 
     def test_ftruncate(self):
         name = uuid4().hex
@@ -374,6 +430,45 @@ class FileOpsTest(unittest.TestCase):
             self.assertRaises(OSError, f.flistxattr, size=1)
             # invalid size - should fail
             self.assertRaises(ValueError, f.flistxattr, size=-1)
+
+    def test_access(self):
+        file_name = uuid4().hex
+        with File(self.vol.open(file_name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.write("I'm whatever Gotham needs me to be")
+            f.fsync()
+        # Check that file exists
+        self.assertTrue(self.vol.access(file_name, os.F_OK))
+        # Check that file does not exist
+        self.assertFalse(self.vol.access("nonexistentfile", os.F_OK))
+        dir_name = uuid4().hex
+        self.vol.mkdir(dir_name)
+        # Check that directory exists
+        self.assertTrue(self.vol.access(dir_name, os.F_OK))
+        # Check if there is execute and write permission
+        self.assertTrue(self.vol.access(file_name, os.W_OK | os.X_OK))
+
+    def test_getcwd_and_chdir(self):
+        # CWD should be root at first
+        self.assertEqual(self.vol.getcwd(), '/')
+        dir_structure = "/%s/%s" % (uuid4().hex, uuid4().hex)
+        self.vol.makedirs(dir_structure)
+        # Change directory
+        self.vol.chdir(dir_structure)
+        # The changed directory should now be CWD
+        self.assertEqual(self.vol.getcwd(), dir_structure)
+        self.vol.chdir("../..")
+        self.assertEqual(self.vol.getcwd(), '/')
+
+    def test_readlink(self):
+        file_name = uuid4().hex
+        with File(self.vol.open(file_name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.write("It's not who I am underneath,"
+                    "but what I do that defines me.")
+            f.fsync()
+        # Create a symlink
+        link_name = uuid4().hex
+        self.vol.symlink(file_name, link_name)
+        self.assertEqual(self.vol.readlink(link_name), file_name)
 
 
 class DirOpsTest(unittest.TestCase):

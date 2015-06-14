@@ -499,6 +499,33 @@ class Volume(object):
         self.log_file = log_file
         self.log_level = log_level
 
+    def access(self, path, mode):
+        """
+        Use the real uid/gid to test for access to path.
+
+        :param path: Path to be checked.
+        :param mode: mode should be F_OK to test the existence of path, or
+                     it can be the inclusive OR of one or more of R_OK, W_OK,
+                     and X_OK to test permissions
+        :returns: True if access is allowed, False if not
+        """
+        ret = api.glfs_access(self.fs, path, mode)
+        if ret == 0:
+            return True
+        else:
+            return False
+
+    def chdir(self, path):
+        """
+        Change the current working directory to the given path.
+
+        :param path: Path to change current working directory to
+        """
+        ret = api.glfs_chdir(self.fs, path)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
     def chmod(self, path, mode):
         """
         Change mode of path
@@ -551,6 +578,18 @@ class Volume(object):
         """
         return self.stat(path).st_ctime
 
+    def getcwd(self):
+        """
+        Returns current working directory.
+        """
+        PATH_MAX = 4096
+        buf = ctypes.create_string_buffer(PATH_MAX)
+        ret = api.glfs_getcwd(self.fs, buf, PATH_MAX)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return buf.value
+
     def getmtime(self, path):
         """
         Returns the time when changes were made to the content of the path
@@ -564,12 +603,30 @@ class Volume(object):
         """
         return self.stat(filename).st_size
 
-    def getxattr(self, path, key, maxlen):
-        buf = ctypes.create_string_buffer(maxlen)
-        rc = api.glfs_getxattr(self.fs, path, key, buf, maxlen)
+    def getxattr(self, path, key, size=0):
+        """
+        Retrieve the value of the extended attribute identified by key
+        for path specified.
+
+        :param path: Path to file or directory
+        :param key: Key of extended attribute
+        :param size: If size is specified as zero, we first determine the
+                     size of xattr and then allocate a buffer accordingly.
+                     If size is non-zero, it is assumed the caller knows
+                     the size of xattr.
+        :returns: Value of extended attribute corresponding to key specified.
+        """
+        if size == 0:
+            size = api.glfs_getxattr(self.fs, path, key, None, 0)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+
+        buf = ctypes.create_string_buffer(size)
+        rc = api.glfs_getxattr(self.fs, path, key, buf, size)
         if rc < 0:
             err = ctypes.get_errno()
-            raise IOError(err, os.strerror(err))
+            raise OSError(err, os.strerror(err))
         return buf.value[:rc]
 
     def isdir(self, path):
@@ -618,12 +675,28 @@ class Volume(object):
                 dir_list.append(name)
         return dir_list
 
-    def listxattr(self, path):
-        buf = ctypes.create_string_buffer(512)
-        rc = api.glfs_listxattr(self.fs, path, buf, 512)
+    def listxattr(self, path, size=0):
+        """
+        Retrieve list of extended attribute keys for the specified path.
+
+        :param path: Path to file or directory.
+        :param size: If size is specified as zero, we first determine the
+                     size of list and then allocate a buffer accordingly.
+                     If size is non-zero, it is assumed the caller knows
+                     the size of the list.
+        :returns: List of extended attribute keys.
+        """
+        if size == 0:
+            size = api.glfs_listxattr(self.fs, path, None, 0)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err))
+
+        buf = ctypes.create_string_buffer(size)
+        rc = api.glfs_listxattr(self.fs, path, buf, size)
         if rc < 0:
             err = ctypes.get_errno()
-            raise IOError(err, os.strerror(err))
+            raise OSError(err, os.strerror(err))
         xattrs = []
         # Parsing character by character is ugly, but it seems like the
         # easiest way to deal with the "strings separated by NUL in one
@@ -643,6 +716,11 @@ class Volume(object):
         return xattrs
 
     def lstat(self, path):
+        """
+        Return stat information of path. If path is a symbolic link, then it
+        returns information about the link itself, not the file that it refers
+        to.
+        """
         s = api.Stat()
         rc = api.glfs_lstat(self.fs, path, ctypes.byref(s))
         if rc < 0:
@@ -668,6 +746,9 @@ class Volume(object):
         self.mkdir(name, mode)
 
     def mkdir(self, path, mode=0777):
+        """
+        Create a directory
+        """
         ret = api.glfs_mkdir(self.fs, path, mode)
         if ret < 0:
             err = ctypes.get_errno()
@@ -732,25 +813,67 @@ class Volume(object):
         return fd
 
     def opendir(self, path):
+        """
+        Open a directory.
+
+        :param path: Path to the directory
+        :returns: Returns a instance of Dir class
+        """
         fd = api.glfs_opendir(self.fs, path)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return Dir(fd)
 
+    def readlink(self, path):
+        """
+        Read contents of symbolic link path.
+
+        :param path: Path of symbolic link
+        :returns: Contents of symlink
+        """
+        PATH_MAX = 4096
+        buf = ctypes.create_string_buffer(PATH_MAX)
+        ret = api.glfs_readlink(self.fs, path, buf, PATH_MAX)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return buf.value[:ret]
+
+    def remove(self, path):
+        """
+        Remove (delete) the file path. If path is a directory,
+        OSError is raised.
+        """
+        return self.unlink(path)
+
     def removexattr(self, path, key):
+        """
+        Remove a extended attribute of the file.
+
+        :param path: Path to the file or directory.
+        :param key: The key of extended attribute.
+        """
         ret = api.glfs_removexattr(self.fs, path, key)
         if ret < 0:
             err = ctypes.get_errno()
-            raise IOError(err, os.strerror(err))
+            raise OSError(err, os.strerror(err))
 
-    def rename(self, opath, npath):
-        ret = api.glfs_rename(self.fs, opath, npath)
+    def rename(self, src, dst):
+        """
+        Rename the file or directory from src to dst.
+        """
+        ret = api.glfs_rename(self.fs, src, dst)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
     def rmdir(self, path):
+        """
+        Remove (delete) the directory path. Only works when the directory is
+        empty, otherwise, OSError is raised. In order to remove whole
+        directory trees, rmtree() can be used.
+        """
         ret = api.glfs_rmdir(self.fs, path)
         if ret < 0:
             err = ctypes.get_errno()
@@ -798,24 +921,51 @@ class Volume(object):
             onerror(self.rmdir, path, e)
 
     def setfsuid(self, uid):
+        """
+        setfsuid() changes the value of the caller's filesystem user ID-the
+        user ID that the Linux kernel uses to check for all accesses to the
+        filesystem.
+        """
         ret = api.glfs_setfsuid(uid)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
     def setfsgid(self, gid):
+        """
+        setfsgid() changes the value of the caller's filesystem group ID-the
+        group ID that the Linux kernel uses to check for all accesses to the
+        filesystem.
+        """
         ret = api.glfs_setfsgid(gid)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
-    def setxattr(self, path, key, value, vlen):
-        ret = api.glfs_setxattr(self.fs, path, key, value, vlen, 0)
+    def setxattr(self, path, key, value, flags=0):
+        """
+        Set extended attribute of the path.
+
+        :param path: Path to file or directory.
+        :param key: The key of extended attribute.
+        :param value: The valiue of extended attribute.
+        :param flags: Possible values are 0 (default), 1 and 2
+                      0: xattr will be created if it does not exist, or the
+                         value will be replaced if the xattr exists.
+                      1: Perform a pure create, which fails if the named
+                         attribute already exists.
+                      2: Perform a pure replace operation, which fails if the
+                         named attribute does not already exist.
+        """
+        ret = api.glfs_setxattr(self.fs, path, key, value, len(value), flags)
         if ret < 0:
             err = ctypes.get_errno()
-            raise IOError(err, os.strerror(err))
+            raise OSError(err, os.strerror(err))
 
     def stat(self, path):
+        """
+        Returns stat information of path.
+        """
         s = api.Stat()
         rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
         if rc < 0:
@@ -825,8 +975,8 @@ class Volume(object):
 
     def statvfs(self, path):
         """
-        To get status information about the file system that contains the file
-        named by the path argument.
+        Returns information about a mounted glusterfs volume. path is the
+        pathname of any file within the mounted filesystem.
         """
         s = api.Statvfs()
         rc = api.glfs_statvfs(self.fs, path, ctypes.byref(s))

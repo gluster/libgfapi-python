@@ -320,26 +320,26 @@ glfs_fsync = ctypes.CFUNCTYPE(
 glfs_lseek = ctypes.CFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong,
                               ctypes.c_int)(('glfs_lseek', client))
 
-glfs_read = ctypes.CFUNCTYPE(ctypes.c_size_t,
+glfs_read = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
                              ctypes.c_void_p,
                              ctypes.c_void_p,
                              ctypes.c_size_t,
                              ctypes.c_int)(('glfs_read', client))
 
-glfs_write = ctypes.CFUNCTYPE(ctypes.c_size_t,
+glfs_write = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
                               ctypes.c_void_p,
                               ctypes.c_void_p,
                               ctypes.c_size_t,
                               ctypes.c_int)(('glfs_write', client))
 
-glfs_getxattr = ctypes.CFUNCTYPE(ctypes.c_size_t,
+glfs_getxattr = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
                                  ctypes.c_void_p,
                                  ctypes.c_char_p,
                                  ctypes.c_char_p,
                                  ctypes.c_void_p,
                                  ctypes.c_size_t)(('glfs_getxattr', client))
 
-glfs_listxattr = ctypes.CFUNCTYPE(ctypes.c_size_t,
+glfs_listxattr = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
                                   ctypes.c_void_p,
                                   ctypes.c_char_p,
                                   ctypes.c_void_p,
@@ -423,6 +423,25 @@ glfs_flistxattr = ctypes.CFUNCTYPE(ctypes.c_ssize_t,
                                    ctypes.c_size_t)(('glfs_flistxattr',
                                                     client))
 
+glfs_access = ctypes.CFUNCTYPE(ctypes.c_int,
+                               ctypes.c_void_p,
+                               ctypes.c_char_p,
+                               ctypes.c_int)(('glfs_access', client))
+
+glfs_readlink = ctypes.CFUNCTYPE(ctypes.c_int,
+                                 ctypes.c_void_p,
+                                 ctypes.c_char_p,
+                                 ctypes.c_char_p,
+                                 ctypes.c_size_t)(('glfs_readlink', client))
+
+glfs_chdir = ctypes.CFUNCTYPE(ctypes.c_int,
+                              ctypes.c_void_p,
+                              ctypes.c_char_p)(('glfs_chdir', client))
+
+glfs_getcwd = ctypes.CFUNCTYPE(ctypes.c_char_p,
+                               ctypes.c_void_p,
+                               ctypes.c_char_p,
+                               ctypes.c_size_t)(('glfs_getcwd', client))
 
 
 # TODO: creat and open fails on test_create_file_already_exists & test_open_file_not_exist functional testing, # noqa

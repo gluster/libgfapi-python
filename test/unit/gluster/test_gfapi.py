@@ -562,7 +562,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_getxattr.return_value = -1
 
         with patch("gluster.gfapi.api.glfs_getxattr", mock_glfs_getxattr):
-            self.assertRaises(IOError, self.vol.getxattr, "file.txt",
+            self.assertRaises(OSError, self.vol.getxattr, "file.txt",
                               "key1", 32)
 
     def test_listdir_success(self):
@@ -597,7 +597,8 @@ class TestVolume(unittest.TestCase):
 
     def test_listxattr_success(self):
         def mock_glfs_listxattr(fs, path, buf, buflen):
-            buf.raw = "key1\0key2\0"
+            if buf:
+                buf.raw = "key1\0key2\0"
             return 10
 
         with patch("gluster.gfapi.api.glfs_listxattr", mock_glfs_listxattr):
@@ -610,7 +611,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_listxattr.return_value = -1
 
         with patch("gluster.gfapi.api.glfs_listxattr", mock_glfs_listxattr):
-            self.assertRaises(IOError, self.vol.listxattr, "file.txt")
+            self.assertRaises(OSError, self.vol.listxattr, "file.txt")
 
     def test_lstat_success(self):
         mock_glfs_lstat = Mock()
@@ -823,7 +824,7 @@ class TestVolume(unittest.TestCase):
 
         with patch("gluster.gfapi.api.glfs_removexattr",
                    mock_glfs_removexattr):
-            self.assertRaises(IOError, self.vol.removexattr, "file.txt",
+            self.assertRaises(OSError, self.vol.removexattr, "file.txt",
                               "key1")
 
     def test_rmtree_success(self):
@@ -940,7 +941,7 @@ class TestVolume(unittest.TestCase):
         mock_glfs_setxattr.return_value = -1
 
         with patch("gluster.gfapi.api.glfs_setxattr", mock_glfs_setxattr):
-            self.assertRaises(IOError, self.vol.setxattr, "file.txt",
+            self.assertRaises(OSError, self.vol.setxattr, "file.txt",
                               "key1", "hello", 5)
 
     def test_symlink_success(self):
