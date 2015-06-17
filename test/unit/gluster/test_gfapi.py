@@ -163,7 +163,7 @@ class TestFile(unittest.TestCase):
 
         with patch("gluster.gfapi.api.glfs_read", _mock_glfs_read):
             b = self.fd.read(5)
-            self.assertEqual(b.value, "hello")
+            self.assertEqual(b, "hello")
 
     def test_read_fail_exception(self):
         mock_glfs_read = Mock()

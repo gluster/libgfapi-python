@@ -54,19 +54,19 @@ class BinFileOpsTest(unittest.TestCase):
         cls.vol.rmtree("/", ignore_errors=True)
         cls.vol = None
 
-    def setUp(self):
-        self.data = bytearray([(k % 128) for k in range(0, 1024)])
-        self.path = self._testMethodName + ".io"
-        with File(self.vol.open(self.path,
-                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644)) as f:
-            f.write(self.data)
-
     def test_bin_open_and_read(self):
-        with File(self.vol.open(self.path, os.O_RDONLY)) as f:
-            self.assertTrue(isinstance(f, File))
-            buf = f.read(len(self.data))
-            self.assertFalse(isinstance(buf, types.IntType))
-            self.assertEqual(buf, self.data)
+        # Write binary data
+        data = "Gluster is so awesome"
+        payload = bytearray(data, "ascii")
+        path = self._testMethodName + ".io"
+        with File(self.vol.open(path,
+                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644)) as f:
+            f.write(payload)
+        # Read binary data
+        with File(self.vol.open(path, os.O_RDONLY)) as f:
+            buf = f.read()
+            self.assertEqual(bytearray(buf), payload)
+            self.assertEqual(buf.decode("ascii"), data)
 
 
 class FileOpsTest(unittest.TestCase):
@@ -108,7 +108,7 @@ class FileOpsTest(unittest.TestCase):
             self.assertTrue(isinstance(f, File))
             buf = f.read(len(self.data))
             self.assertFalse(isinstance(buf, types.IntType))
-            self.assertEqual(buf.value, self.data)
+            self.assertEqual(buf, self.data)
 
     def test_open_file_not_exist(self):
         try:
@@ -148,7 +148,7 @@ class FileOpsTest(unittest.TestCase):
         with self.vol.fopen(name) as f:
             self.assertEqual('r', f.mode)
             self.assertEqual(f.lseek(0, os.SEEK_CUR), 0)
-            self.assertEqual(f.read().value, data)
+            self.assertEqual(f.read(), data)
 
         # 'r+': Open for reading and writing.
         with self.vol.fopen(name, 'r+') as f:
@@ -159,7 +159,7 @@ class FileOpsTest(unittest.TestCase):
             # writes should pass
             f.write(data)
             f.lseek(0, os.SEEK_SET)
-            self.assertEqual(f.read().value, data)
+            self.assertEqual(f.read(), data)
 
         # 'w': Truncate file to zero length or create text file for writing.
         self.assertEqual(self.vol.getsize(name), len(data))
@@ -177,7 +177,7 @@ class FileOpsTest(unittest.TestCase):
             self.assertEqual(self.vol.getsize(name), 0)
             f.write(data)
             f.lseek(0, os.SEEK_SET)
-            self.assertEqual(f.read().value, data)
+            self.assertEqual(f.read(), data)
 
         # 'a': Open for appending (writing at end of file).  The file is
         # created if it does not exist.
@@ -186,7 +186,7 @@ class FileOpsTest(unittest.TestCase):
             # This should be appended at the end
             f.write("hello")
         with self.vol.fopen(name) as f:
-            self.assertEqual(f.read().value, data + "hello")
+            self.assertEqual(f.read(), data + "hello")
 
         # 'a+': Open for reading and appending (writing at end of file)
         with self.vol.fopen(name, 'a+') as f:
@@ -195,7 +195,7 @@ class FileOpsTest(unittest.TestCase):
             f.write(" world")
             f.fsync()
             f.lseek(0, os.SEEK_SET)
-            self.assertEqual(f.read().value, data + "hello world")
+            self.assertEqual(f.read(), data + "hello world")
 
     def test_create_file_already_exists(self):
         try:
@@ -219,13 +219,13 @@ class FileOpsTest(unittest.TestCase):
             self.assertEqual(ret, 0)
 
             buf = fdup.read(15)
-            self.assertEqual(buf.value, "I must not fear")
+            self.assertEqual(buf, "I must not fear")
 
             ret = fdup.lseek(29, os.SEEK_SET)
             self.assertEqual(ret, 29)
 
             buf = fdup.read(11)
-            self.assertEqual(buf.value, "mind-killer")
+            self.assertEqual(buf, "mind-killer")
 
             fdup.close()
         except OSError as e:
@@ -411,7 +411,7 @@ class FileOpsTest(unittest.TestCase):
             # The size should be reduced
             self.assertEqual(f.fgetsize(), 5)
             # So should be the content.
-            self.assertEqual(f.read().value, "12345")
+            self.assertEqual(f.read(), "12345")
 
     def test_flistxattr(self):
         name = uuid4().hex
