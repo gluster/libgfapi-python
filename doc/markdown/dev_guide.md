@@ -169,7 +169,7 @@ gluster volume start test
 ### Important Notes:
 
 #### Definining a hostname
-GlusterFS does not allow for specifiyng `localhost` as a valid hostname when creating a volume. Make sure to set host and volume information in test/test.conf file. The default host is 'gfshost' and default volume name is 'test'.
+GlusterFS does not allow for specifiyng `localhost` as a valid hostname when creating a volume. However, `localhost` can be used to mount a volume. Make sure to set host and volume information in test/test.conf file. The default host is 'localhost' and default volume name is 'test'.
 
 #### Stopping services
 For the purpose of running this test, stop the `firewalld` service and disable `selinux`.
