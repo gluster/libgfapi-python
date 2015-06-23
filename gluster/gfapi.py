@@ -328,6 +328,29 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    def readinto(self, buf):
+        """
+        Read up to len(buf) bytes into buf which must be a bytearray.
+        (buf cannot be a string as strings are immutable in python)
+
+        This method is useful when you have to read a large file over
+        multiple read calls. While read() allocates a buffer every time
+        it's invoked, readinto() copies data to an already allocated
+        buffer passed to it.
+
+        Returns the number of bytes read (0 for EOF).
+        """
+        if type(buf) is bytearray:
+            buf_ptr = (ctypes.c_ubyte * len(buf)).from_buffer(buf)
+        else:
+            # TODO: Allow reading other types such as array.array
+            raise TypeError("buffer must of type bytearray")
+        nread = api.glfs_read(self.fd, buf_ptr, len(buf_ptr), 0)
+        if nread < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        return nread
+
     def write(self, data, flags=0):
         """
         Write data to the file.
