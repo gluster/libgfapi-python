@@ -548,7 +548,7 @@ class DirOpsTest(unittest.TestCase):
 
 class TestVolumeInit(unittest.TestCase):
 
-    def test_mount_unmount_default(self):
+    def test_mount_umount_default(self):
         # Create volume object instance
         vol = Volume(HOST, VOLNAME)
         # Check attribute init
@@ -563,18 +563,18 @@ class TestVolumeInit(unittest.TestCase):
         # Check mounted property
         self.assertTrue(vol.mounted)
         # Unmount the volume
-        vol.unmount()
+        vol.umount()
         # Check mounted property again
         self.assertFalse(vol.mounted)
-        # Do a double unmount - should not crash or raise exception
-        vol.unmount()
+        # Do a double umount - should not crash or raise exception
+        vol.umount()
         self.assertFalse(vol.mounted)
         # Do a double mount - should not crash or raise exception
         vol.mount()
         vol.mount()
         self.assertTrue(vol.mounted)
         # Unmount the volume
-        vol.unmount()
+        vol.umount()
         self.assertFalse(vol.mounted)
 
     def test_mount_err(self):
@@ -608,5 +608,5 @@ class TestVolumeInit(unittest.TestCase):
         vol.set_logging(log_file2, 7)
         self.assertEqual(vol.log_file, log_file2)
         # Unmount the volume
-        vol.unmount()
+        vol.umount()
         self.assertFalse(vol.mounted)

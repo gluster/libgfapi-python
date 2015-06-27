@@ -453,7 +453,7 @@ class Volume(object):
             else:
                 self._mounted = True
 
-    def unmount(self):
+    def umount(self):
         """
         Unmount a mounted GlusterFS volume.
 
@@ -465,13 +465,13 @@ class Volume(object):
             if ret < 0:
                 raise LibgfapiException("glfs_fini(%s) failed." % (self.fs))
             else:
-                # Succeeded. Protect against multiple unmount() calls.
+                # Succeeded. Protect against multiple umount() calls.
                 self._mounted = False
                 self.fs = None
 
     def __del__(self):
         try:
-            self.unmount()
+            self.umount()
         except LibgfapiException:
             pass
 

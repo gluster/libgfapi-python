@@ -329,12 +329,12 @@ class TestVolume(unittest.TestCase):
         self.assertEqual(v.port, 9876)
         self.assertFalse(v.mounted)
 
-    def test_mount_unmount_success(self):
+    def test_mount_umount_success(self):
         v = Volume("host", "vol")
         v.mount()
         self.assertTrue(v.mounted)
         self.assertTrue(v.fs)
-        v.unmount()
+        v.umount()
         self.assertFalse(v.mounted)
         self.assertFalse(v.fs)
 
@@ -379,14 +379,14 @@ class TestVolume(unittest.TestCase):
             self.assertFalse(v.mounted)
             _m_glfs_init.assert_caled_once_with(v.fs)
 
-    def test_unmount_error(self):
+    def test_umount_error(self):
         v = Volume("host", "vol")
         v.mount()
         _m_glfs_fini = Mock(return_value=-1)
         with patch("gluster.gfapi.api.glfs_fini", _m_glfs_fini):
-            self.assertRaises(LibgfapiException, v.unmount)
+            self.assertRaises(LibgfapiException, v.umount)
             _m_glfs_fini.assert_called_once_with(v.fs)
-            # Should still be mounted as unmount failed.
+            # Should still be mounted as umount failed.
             self.assertTrue(v.mounted)
 
     def test_set_logging(self):
