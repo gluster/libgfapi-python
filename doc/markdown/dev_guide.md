@@ -204,6 +204,7 @@ If new functionality has been added, it is highly recommended that one or more t
 
 The functional tests expects a GlusterFS `test` volume to be created and accessible.
 
+Note: You may need to update your test configuration file, located at `test/test.conf` with your hostname and volume name.
 To run the functional tests, please type:
 
 ```
