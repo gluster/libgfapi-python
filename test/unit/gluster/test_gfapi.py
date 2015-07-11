@@ -377,7 +377,7 @@ class TestVolume(unittest.TestCase):
         with patch("gluster.gfapi.api.glfs_init", _m_glfs_init):
             self.assertRaises(LibgfapiException, v.mount)
             self.assertFalse(v.mounted)
-            _m_glfs_init.assert_caled_once_with(v.fs)
+            _m_glfs_init.assert_called_once_with(v.fs)
 
     def test_umount_error(self):
         v = Volume("host", "vol")
