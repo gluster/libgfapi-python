@@ -11,6 +11,7 @@
 
 import ctypes
 from ctypes.util import find_library
+from ctypes import sizeof
 
 
 # LD_LIBRARY_PATH is not looked up by ctypes.util.find_library()
@@ -40,6 +41,18 @@ try:
 except OSError:
     raise ImportError("ctypes.CDLL() cannot load {0}. You might want to set "
                       "LD_LIBRARY_PATH env variable".format(so_file_name))
+
+# c_ssize_t was only added in py27. Manually backporting it here for py26
+try:
+    import ctypes.c_ssize_t
+except ImportError:
+    if sizeof(ctypes.c_uint) == sizeof(ctypes.c_void_p):
+        setattr(ctypes, 'c_ssize_t', ctypes.c_int)
+    elif sizeof(ctypes.c_ulong) == sizeof(ctypes.c_void_p):
+        setattr(ctypes, 'c_ssize_t', ctypes.c_long)
+    elif sizeof(ctypes.c_ulonglong) == sizeof(ctypes.c_void_p):
+        setattr(ctypes, 'c_ssize_t', ctypes.c_longlong)
+
 
 # Wow, the Linux kernel folks really play nasty games with this structure.  If
 # you look at the man page for stat(2) and then at this definition you'll note
