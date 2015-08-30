@@ -133,7 +133,13 @@ class FileOpsTest(unittest.TestCase):
         # invalid mode
         self.assertRaises(ValueError, self.vol.fopen, "file", 'x+')
         # file does not exist
-        self.assertRaises(OSError, self.vol.fopen, "file", 'r')
+        try:
+            self.vol.fopen("file", "r")
+        except OSError as err:
+            if err.errno != errno.ENOENT:
+                self.fail("Expecting ENOENT")
+        else:
+            self.fail("Expecting ENOENT")
 
     def test_fopen(self):
         # Default permission should be 0666
@@ -290,7 +296,13 @@ class FileOpsTest(unittest.TestCase):
     def test_rename(self):
         newpath = self.path + ".rename"
         self.vol.rename(self.path, newpath)
-        self.assertRaises(OSError, self.vol.lstat, self.path)
+        try:
+            self.vol.lstat(self.path)
+        except OSError as err:
+            if err.errno != errno.ENOENT:
+                self.fail("Expecting ENOENT")
+        else:
+            self.fail("Expecting ENOENT")
 
     def test_stat(self):
         sb = self.vol.stat(self.path)
@@ -299,7 +311,13 @@ class FileOpsTest(unittest.TestCase):
 
     def test_unlink(self):
         self.vol.unlink(self.path)
-        self.assertRaises(OSError, self.vol.lstat, self.path)
+        try:
+            self.vol.lstat(self.path)
+        except OSError as err:
+            if err.errno != errno.ENOENT:
+                self.fail("Expecting ENOENT")
+        else:
+            self.fail("Expecting ENOENT")
 
     def test_setxattr(self):
         value = "hello world"
