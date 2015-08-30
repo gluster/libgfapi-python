@@ -432,24 +432,27 @@ class Volume(object):
 
         self.fs = api.glfs_new(self.volname)
         if not self.fs:
-            raise LibgfapiException("glfs_new(%s) failed." % (self.volname))
+            err = ctypes.get_errno()
+            raise LibgfapiException("glfs_new(%s) failed: %s" %
+                                    (self.volname, os.strerror(err)))
 
         ret = api.glfs_set_volfile_server(self.fs, self.protocol,
                                           self.host, self.port)
         if ret < 0:
-            # FIXME: For some reason, get_errno() is not able to capture
-            # proper errno. Until then..
-            # https://bugzilla.redhat.com/show_bug.cgi?id=1196161
+            err = ctypes.get_errno()
             raise LibgfapiException("glfs_set_volfile_server(%s, %s, %s, "
-                                    "%s) failed." % (self.fs, self.protocol,
-                                                     self.host, self.port))
+                                    "%s) failed: %s" % (self.fs, self.protocol,
+                                                        self.host, self.port,
+                                                        os.strerror(err)))
 
         self.set_logging(self.log_file, self.log_level)
 
         if self.fs and not self._mounted:
             ret = api.glfs_init(self.fs)
             if ret < 0:
-                raise LibgfapiException("glfs_init(%s) failed." % (self.fs))
+                err = ctypes.get_errno()
+                raise LibgfapiException("glfs_init(%s) failed: %s" %
+                                        (self.fs, os.strerror(err)))
             else:
                 self._mounted = True
 
@@ -463,7 +466,9 @@ class Volume(object):
         if self.fs:
             ret = self._api.glfs_fini(self.fs)
             if ret < 0:
-                raise LibgfapiException("glfs_fini(%s) failed." % (self.fs))
+                err = ctypes.get_errno()
+                raise LibgfapiException("glfs_fini(%s) failed: %s" %
+                                        (self.fs, os.strerror(err)))
             else:
                 # Succeeded. Protect against multiple umount() calls.
                 self._mounted = False
@@ -497,8 +502,10 @@ class Volume(object):
         if self.fs:
             ret = api.glfs_set_logging(self.fs, self.log_file, self.log_level)
             if ret < 0:
-                raise LibgfapiException("glfs_set_logging(%s, %s) failed." %
-                                        (self.log_file, self.log_level))
+                err = ctypes.get_errno()
+                raise LibgfapiException("glfs_set_logging(%s, %s) failed: %s" %
+                                        (self.log_file, self.log_level,
+                                         os.strerror(err)))
         self.log_file = log_file
         self.log_level = log_level
 
