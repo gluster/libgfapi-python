@@ -376,7 +376,7 @@ class Dir(object):
 class Volume(object):
 
     def __init__(self, host, volname,
-                 proto="tcp", port=24007, log_file=None, log_level=7):
+                 proto="tcp", port=24007, log_file=False, log_level=7):
         """
         Create a Volume object instance.
 
@@ -385,8 +385,11 @@ class Volume(object):
         :param proto: Transport protocol to be used to connect to management
                       daemon. Permitted values are "tcp" and "rdma".
         :param port: Port number where gluster management daemon is listening.
-        :param log_file: Path to log file. When this is set to None, a new
-                         logfile will be created in default log directory
+        :param log_file: Path of log file.
+                         If set to "/dev/null" or False explicitly, nothing
+                         will be logged.
+                         If set to None or "", a new logfile will be created
+                         in default log directory
                          i.e /var/log/glusterfs
         :param log_level: Integer specifying the degree of verbosity.
                           Higher the value, more verbose the logging.
@@ -488,19 +491,24 @@ class Volume(object):
         and log level is instantaneous.
 
         :param log_file: Path of log file.
-                         If set to "/dev/null", nothing will be logged.
-                         If set to None, a new logfile will be created in
-                         default log directory (/var/log/glusterfs)
+                         If set to "/dev/null" or False explicitly, nothing
+                         will be logged.
+                         If set to None or "", a new logfile will be created
+                         in default log directory (/var/log/glusterfs)
         :param log_level: Integer specifying the degree of verbosity.
                           Higher the value, more verbose the logging.
         """
+        if log_file is False:
+            log_file = "/dev/null"
+        if log_file is "":
+            log_file = None
+        self.log_file = log_file
+        self.log_level = log_level
         if self.fs:
             ret = api.glfs_set_logging(self.fs, self.log_file, self.log_level)
             if ret < 0:
                 raise LibgfapiException("glfs_set_logging(%s, %s) failed." %
                                         (self.log_file, self.log_level))
-        self.log_file = log_file
-        self.log_level = log_level
 
     def access(self, path, mode):
         """
