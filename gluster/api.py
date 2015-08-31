@@ -271,6 +271,18 @@ glfs_set_logging = ctypes.CFUNCTYPE(ctypes.c_int,
 glfs_fini = ctypes.CFUNCTYPE(
     ctypes.c_int, ctypes.c_void_p)(('glfs_fini', client))
 
+glfs_creat = ctypes.CFUNCTYPE(ctypes.c_void_p,
+                              ctypes.c_void_p,
+                              ctypes.c_char_p,
+                              ctypes.c_int,
+                              ctypes.c_uint,
+                              use_errno=True)(('glfs_creat', client))
+
+glfs_open = ctypes.CFUNCTYPE(ctypes.c_void_p,
+                             ctypes.c_void_p,
+                             ctypes.c_char_p,
+                             ctypes.c_int,
+                             use_errno=True)(('glfs_open', client))
 
 glfs_close = ctypes.CFUNCTYPE(
     ctypes.c_int, ctypes.c_void_p)(('glfs_close', client))
@@ -444,12 +456,6 @@ glfs_getcwd = ctypes.CFUNCTYPE(ctypes.c_char_p,
                                ctypes.c_size_t)(('glfs_getcwd', client))
 
 
-# TODO: creat and open fails on test_create_file_already_exists & test_open_file_not_exist functional testing, # noqa
-# when defined via function prototype.. Need to find RCA. For time being, using it from 'api.glfs_' # noqa
-#_glfs_creat = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_uint) # noqa
-                              # (('glfs_creat', client)) # noqa
-#_glfs_open = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int) # noqa
-#                               (('glfs_open', client)) # noqa
 # TODO: # discard and fallocate fails with "AttributeError: /lib64/libgfapi.so.0: undefined symbol: glfs_discard", # noqa
 #  for time being, using it from api.* # noqa
 # glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
@@ -457,8 +463,6 @@ glfs_getcwd = ctypes.CFUNCTYPE(ctypes.c_char_p,
 #                                   (('glfs_fallocate', client)) # noqa
 
 
-#glfs_creat = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_uint)(('glfs_creat', client)) # noqa
-#glfs_open = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int)(('glfs_open', client)) # noqa
 
 #glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
 #glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t)(('glfs_fallocate', client)) # noqa

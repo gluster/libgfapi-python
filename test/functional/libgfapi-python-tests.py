@@ -13,6 +13,7 @@ import unittest
 import os
 import types
 import errno
+import threading
 
 from gluster.gfapi import File, Volume
 from gluster.exceptions import LibgfapiException
@@ -196,6 +197,17 @@ class FileOpsTest(unittest.TestCase):
             f.fsync()
             f.lseek(0, os.SEEK_SET)
             self.assertEqual(f.read(), data + "hello world")
+
+    def test_fopen_in_thread(self):
+        def gluster_fopen():
+            name = uuid4().hex
+            with self.vol.fopen(name, 'w') as f:
+                f.write('hello world')
+
+        # the following caused segfault before the fix
+        thread = threading.Thread(target=gluster_fopen)
+        thread.start()
+        thread.join()
 
     def test_create_file_already_exists(self):
         try:
