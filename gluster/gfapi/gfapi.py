@@ -626,7 +626,7 @@ class DirEntry(object):
 class Volume(object):
 
     def __init__(self, host, volname,
-                 proto="tcp", port=24007, log_file=None, log_level=7):
+                 proto="tcp", port=24007, log_file="/dev/null", log_level=7):
         """
         Create a Volume object instance.
 
@@ -638,7 +638,7 @@ class Volume(object):
         :param port: Port number where gluster management daemon is listening.
         :param log_file: Path to log file. When this is set to None, a new
                          logfile will be created in default log directory
-                         i.e /var/log/glusterfs
+                         i.e /var/log/glusterfs. The default is "/dev/null"
         :param log_level: Integer specifying the degree of verbosity.
                           Higher the value, more verbose the logging.
 
@@ -762,14 +762,20 @@ class Volume(object):
                           Higher the value, more verbose the logging.
         """
         if self.fs:
-            ret = api.glfs_set_logging(self.fs, self.log_file, self.log_level)
+            ret = api.glfs_set_logging(self.fs, log_file, log_level)
             if ret < 0:
                 err = ctypes.get_errno()
                 raise LibgfapiException("glfs_set_logging(%s, %s) failed: %s" %
-                                        (self.log_file, self.log_level,
+                                        (log_file, log_level,
                                          os.strerror(err)))
         self.log_file = log_file
         self.log_level = log_level
+
+    def disable_logging(self):
+        """
+        Sends logs to /dev/null effectively disabling them
+        """
+        self.set_logging("/dev/null", self.log_level)
 
     @validate_mount
     def get_volume_id(self):
@@ -777,7 +783,7 @@ class Volume(object):
         Returns the volume ID (of type uuid.UUID) for the currently mounted
         volume.
         """
-        if self.volid != None:
+        if self.volid is not None:
             return self.volid
         size = 16
         buf = ctypes.create_string_buffer(size)

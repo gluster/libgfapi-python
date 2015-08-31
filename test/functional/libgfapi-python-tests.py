@@ -1095,7 +1095,7 @@ class TestVolumeInit(unittest.TestCase):
         # Create volume object instance
         vol = Volume(HOST, VOLNAME)
         # Check attribute init
-        self.assertEqual(vol.log_file, None)
+        self.assertEqual(vol.log_file, "/dev/null")
         self.assertEqual(vol.log_level, 7)
         self.assertEqual(vol.host, HOST)
         self.assertEqual(vol.volname, VOLNAME)

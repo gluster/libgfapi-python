@@ -449,7 +449,7 @@ class TestVolume(unittest.TestCase):
         _m_set_logging = Mock(return_value=-1)
         with patch("gluster.gfapi.api.glfs_set_logging", _m_set_logging):
             self.assertRaises(LibgfapiException, v.set_logging, "/dev/null", 7)
-            _m_set_logging.assert_called_once_with(v.fs, None, 7)
+            _m_set_logging.assert_called_once_with(v.fs, "/dev/null", 7)
 
     def test_chmod_success(self):
         mock_glfs_chmod = Mock()
