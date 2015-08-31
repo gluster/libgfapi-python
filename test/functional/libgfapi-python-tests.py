@@ -132,7 +132,8 @@ class FileOpsTest(unittest.TestCase):
         # invalid mode
         self.assertRaises(ValueError, self.vol.fopen, "file", 'x+')
         # file does not exist
-        self.assertRaises(OSError, self.vol.fopen, "file", 'r')
+        self.assertRaisesRegexp(OSError, 'No such file or directory',
+                                self.vol.fopen, "file", 'r')
 
     def test_fopen(self):
         # Default permission should be 0666
@@ -278,7 +279,7 @@ class FileOpsTest(unittest.TestCase):
     def test_rename(self):
         newpath = self.path + ".rename"
         self.vol.rename(self.path, newpath)
-        self.assertRaises(OSError, self.vol.lstat, self.path)
+        self.assertRaisesRegexp(OSError, 'No such file or directory', self.vol.lstat, self.path)
 
     def test_stat(self):
         sb = self.vol.stat(self.path)
@@ -287,7 +288,7 @@ class FileOpsTest(unittest.TestCase):
 
     def test_unlink(self):
         self.vol.unlink(self.path)
-        self.assertRaises(OSError, self.vol.lstat, self.path)
+        self.assertRaisesRegexp(OSError, 'No such file or directory', self.vol.lstat, self.path)
 
     def test_setxattr(self):
         value = "hello world"
