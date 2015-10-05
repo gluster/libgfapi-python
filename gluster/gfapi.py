@@ -322,7 +322,7 @@ class File(object):
             # In python 2.x, read() always returns a string. It's really upto
             # the consumer to decode this string into whatever encoding it was
             # written with.
-            return rbuf.value[:ret]
+            return rbuf.raw[:ret]
         elif ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
