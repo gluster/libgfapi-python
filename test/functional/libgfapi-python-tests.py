@@ -26,13 +26,13 @@ if config:
     try:
         HOST = config.get('func_test', 'gfs_host')
     except (NoSectionError, NoOptionError):
-        HOST = 'gfshost'
+        HOST = 'localhost'
     try:
         VOLNAME = config.get('func_test', 'gfs_volname')
     except (NoSectionError, NoOptionError):
         VOLNAME = 'test'
 else:
-    HOST = 'gfshost'
+    HOST = 'localhost'
     VOLNAME = 'test'
 
 
