@@ -20,6 +20,7 @@ from gluster.exceptions import LibgfapiException
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
+from nose import SkipTest
 
 config = get_test_config()
 if config:
@@ -227,6 +228,7 @@ class FileOpsTest(unittest.TestCase):
             self.fail("Expected a OSError with errno.EEXIST")
 
     def test_write_file_dup_lseek_read(self):
+        raise SkipTest("glfs_dup is currently broken (BZ 1311146)")
         try:
             f = File(self.vol.open("dune", os.O_CREAT | os.O_EXCL | os.O_RDWR))
             f.write("I must not fear. Fear is the mind-killer.")

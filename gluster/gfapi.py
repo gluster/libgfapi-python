@@ -93,6 +93,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
 
     def dup(self):
+        raise LibgfapiException("glfs_dup is currently broken (BZ 1311146)")
         dupfd = api.glfs_dup(self.fd)
         if not dupfd:
             err = ctypes.get_errno()

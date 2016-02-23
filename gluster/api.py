@@ -348,8 +348,8 @@ glfs_fdatasync = gfapi_prototype('glfs_fdatasync', ctypes.c_int,
 glfs_fsync = gfapi_prototype('glfs_fsync', ctypes.c_int,
                              ctypes.c_void_p)
 
-glfs_lseek = gfapi_prototype('glfs_lseek', ctypes.c_ulong,
-                             ctypes.c_void_p, ctypes.c_ulong,
+glfs_lseek = gfapi_prototype('glfs_lseek', ctypes.c_int,
+                             ctypes.c_void_p, ctypes.c_int,
                              ctypes.c_int)
 
 glfs_read = gfapi_prototype('glfs_read', ctypes.c_ssize_t,

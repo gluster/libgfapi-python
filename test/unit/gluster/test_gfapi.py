@@ -97,6 +97,7 @@ class TestFile(unittest.TestCase):
             self.assertRaises(OSError, self.fd.fchown, 9, 11)
 
     def test_dup(self):
+        raise SkipTest("glfs_dup is currently broken (BZ 1311146)")
         mock_glfs_dup = Mock()
         mock_glfs_dup.return_value = 2
 
