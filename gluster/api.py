@@ -200,7 +200,7 @@ class Dirent (ctypes.Structure):
 #               glfs_posix_lock;
 #               glfs_dup;
 #
-#	        }
+#               }
 #
 #   GFAPI_3.4.2 {
 #               glfs_setfsuid;
@@ -478,10 +478,8 @@ glfs_getcwd = gfapi_prototype('glfs_getcwd', ctypes.c_char_p,
 # TODO: # discard and fallocate fails with "AttributeError: /lib64/libgfapi.so.0: undefined symbol: glfs_discard", # noqa
 #  for time being, using it from api.* # noqa
 # glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
-#_glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t) # noqa
+# _glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t) # noqa
 #                                   (('glfs_fallocate', client)) # noqa
 
-
-
-#glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
-#glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t)(('glfs_fallocate', client)) # noqa
+# glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
+# glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t)(('glfs_fallocate', client)) # noqa

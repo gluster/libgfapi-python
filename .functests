@@ -18,29 +18,11 @@
 # This program expects to be run by tox in a virtual python environment
 # so that it does not pollute the host development system
 
-cleanup()
-{
-    if [ -d "/export/brick/b1/" ]; then
-        sudo rm -rf /export/brick/b1/* > /dev/null 2>&1
-    fi
-}
+SRC_DIR=$(python -c "import os; print os.path.dirname(os.path.realpath('$0'))")
+set -e
+cd ${SRC_DIR}
 
-fail()
-{
-    cleanup
-    echo "$1"
-    exit 1
-}
-
-### MAIN ###
-
-mkdir functional_tests > /dev/null 2>&1
-nosetests -v --exe \
-          --with-xunit \
-          --xunit-file functional_tests/libgfapi-python.xml \
-          --with-html-output \
-          --html-out-file functional_tests/libgfapi-python-result.html \
-          test/functional || fail "Functional tests failed"
-
-cleanup
-exit 0
+nosetests -v --exe test/functional
+rvalue=$?
+cd -
+exit $rvalue

@@ -1,9 +1,9 @@
+*.py[co]
 .tox
-gfapi.egg-info
-test/unit/.coverage
-test/unit/nosetests.xml
-test/unit/coverage.xml
-test/unit/cover
-functional_tests
+*.egg
+*.egg-info
+.coverage
+cover
+pycscope.*
 build
-*.pyc
+dist
