@@ -502,6 +502,24 @@ class FileOpsTest(unittest.TestCase):
         self.vol.symlink(file_name, link_name)
         self.assertEqual(self.vol.readlink(link_name), file_name)
 
+    def test_readinto(self):
+        file_name = uuid4().hex
+        with File(self.vol.open(file_name, os.O_WRONLY | os.O_CREAT)) as f:
+            s = ''.join([str(i) for i in xrange(10)])
+            f.write(s)
+            f.fsync()
+
+        buf = bytearray(1)
+        with File(self.vol.open(file_name, os.O_RDONLY)) as f:
+            for i in xrange(10):
+                # Read one character at a time into buf
+                f.readinto(buf)
+                self.assertEqual(len(buf), 1)
+                self.assertEqual(buf, bytearray(str(i)))
+
+        with File(self.vol.open(file_name, os.O_RDONLY)) as f:
+            self.assertRaises(TypeError, f.readinto, str("buf"))
+
 
 class DirOpsTest(unittest.TestCase):
 

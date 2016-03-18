@@ -192,6 +192,17 @@ class TestFile(unittest.TestCase):
                 with patch("gluster.gfapi.File.fgetsize", _mock_fgetsize):
                     self.fd.read(buflen)
 
+    def test_readinto(self):
+        mock_glfs_read = Mock()
+        mock_glfs_read.return_value = 5
+
+        with patch("gluster.gfapi.api.glfs_read", mock_glfs_read):
+            buf = bytearray(10)
+            ret = self.fd.readinto(buf)
+            self.assertEqual(ret, 5)
+
+        self.assertRaises(TypeError, self.fd.readinto, str("hello"))
+
     def test_write_success(self):
         mock_glfs_write = Mock()
         mock_glfs_write.return_value = 5
