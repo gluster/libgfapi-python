@@ -127,6 +127,29 @@ class FileOpsTest(unittest.TestCase):
         self.assertRaises(OSError, self.vol.open, "file",
                           12345)
 
+    def test_double_close(self):
+        name = uuid4().hex
+        f = self.vol.fopen(name, 'w')
+        f.close()
+        for i in range(2):
+            try:
+                f.close()
+            except OSError as err:
+                self.assertEqual(err.errno, errno.EBADF)
+            else:
+                self.fail("Expecting OSError")
+
+    def test_glfd_decorators_IO_on_invalid_glfd(self):
+        name = uuid4().hex
+        with self.vol.fopen(name, 'w') as f:
+            f.write("Valar Morghulis")
+        try:
+            s = f.read()
+        except OSError as err:
+            self.assertEqual(err.errno, errno.EBADF)
+        else:
+            self.fail("Expecting OSError")
+
     def test_fopen_err(self):
         # mode not string
         self.assertRaises(TypeError, self.vol.fopen, "file", os.O_WRONLY)

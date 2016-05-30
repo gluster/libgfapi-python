@@ -17,6 +17,7 @@ import stat
 import errno
 from gluster import api
 from gluster.exceptions import LibgfapiException
+from gluster.utils import validate_mount, validate_glfd
 
 # TODO: Move this utils.py
 python_mode_to_os_flags = {}
@@ -53,18 +54,24 @@ class File(object):
         self.fd = fd
         self.originalpath = path
         self._mode = mode
-        self._closed = False
+        self._validate_init()
 
     def __enter__(self):
-        if self.fd is None:
-            # __enter__ should only be called within the context
-            # of a 'with' statement when opening a file through
-            # Volume.open()
-            raise ValueError("I/O operation on closed file")
+        # __enter__ should only be called within the context
+        # of a 'with' statement when opening a file through
+        # Volume.fopen()
+        self._validate_init()
         return self
 
     def __exit__(self, type, value, tb):
-        self.close()
+        if self.fd:
+            self.close()
+
+    def _validate_init(self):
+        if self.fd is None:
+            raise ValueError("I/O operation on invalid fd")
+        elif not isinstance(self.fd, int):
+            raise ValueError("I/O operation on invalid fd")
 
     @property
     def fileno(self):
@@ -72,7 +79,6 @@ class File(object):
         Return the internal file descriptor (glfd) that is used by the
         underlying implementation to request I/O operations.
         """
-        # TODO: Make self.fd private (self._fd)
         return self.fd
 
     @property
@@ -98,22 +104,22 @@ class File(object):
         Bool indicating the current state of the file object. This is a
         read-only attribute; the close() method changes the value.
         """
-        return self._closed
+        return not self.fd
 
+    @validate_glfd
     def close(self):
         """
         Close the file. A closed file cannot be read or written any more.
-        Calling close() more than once is allowed.
 
         :raises: OSError on failure
         """
-        if not self._closed:
-            ret = api.glfs_close(self.fd)
-            if ret < 0:
-                err = ctypes.get_errno()
-                raise OSError(err, os.strerror(err))
-            self._closed = True
+        ret = api.glfs_close(self.fd)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        self.fd = None
 
+    @validate_glfd
     def discard(self, offset, length):
         """
         This is similar to UNMAP command that is used to return the
@@ -133,6 +139,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def dup(self):
         """
         Return a duplicate of File object. This duplicate File class instance
@@ -146,6 +153,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return File(dupfd, self.originalpath)
 
+    @validate_glfd
     def fallocate(self, mode, offset, length):
         """
         This is a Linux-specific sys call, unlike posix_fallocate()
@@ -164,6 +172,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fchmod(self, mode):
         """
         Change this file's mode
@@ -176,6 +185,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fchown(self, uid, gid):
         """
         Change this file's owner and group id
@@ -189,6 +199,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fdatasync(self):
         """
         Flush buffer cache pages pertaining to data, but not the ones
@@ -201,6 +212,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fgetsize(self):
         """
         Return the size of a file, as reported by fstat()
@@ -209,6 +221,7 @@ class File(object):
         """
         return self.fstat().st_size
 
+    @validate_glfd
     def fgetxattr(self, key, size=0):
         """
         Retrieve the value of the extended attribute identified by key
@@ -235,6 +248,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return buf.value[:rc]
 
+    @validate_glfd
     def flistxattr(self, size=0):
         """
         Retrieve list of extended attributes for the file.
@@ -275,6 +289,7 @@ class File(object):
         xattrs.sort()
         return xattrs
 
+    @validate_glfd
     def fsetxattr(self, key, value, flags=0):
         """
         Set extended attribute of file.
@@ -295,6 +310,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fremovexattr(self, key):
         """
         Remove a extended attribute of the file.
@@ -307,6 +323,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def fstat(self):
         """
         Returns Stat object for this file.
@@ -321,6 +338,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return s
 
+    @validate_glfd
     def fsync(self):
         """
         Flush buffer cache pages pertaining to data and metadata.
@@ -332,6 +350,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def ftruncate(self, length):
         """
         Truncated the file to a size of length bytes.
@@ -348,6 +367,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def lseek(self, pos, how):
         """
         Set the read/write offset position of this file.
@@ -367,6 +387,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    @validate_glfd
     def read(self, size=-1):
         """
         Read at most size bytes from the file.
@@ -389,6 +410,7 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_glfd
     def readinto(self, buf):
         """
         Read up to len(buf) bytes into buf which must be a bytearray.
@@ -413,6 +435,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return nread
 
+    @validate_glfd
     def write(self, data, flags=0):
         """
         Write data to the file.
@@ -434,6 +457,7 @@ class File(object):
             raise OSError(err, os.strerror(err))
         return ret
 
+    @validate_glfd
     def zerofill(self, offset, length):
         """
         Fill 'length' number of bytes with zeroes starting from 'offset'.
@@ -619,6 +643,7 @@ class Volume(object):
         self.log_file = log_file
         self.log_level = log_level
 
+    @validate_mount
     def access(self, path, mode):
         """
         Use the real uid/gid to test for access to path.
@@ -635,6 +660,7 @@ class Volume(object):
         else:
             return False
 
+    @validate_mount
     def chdir(self, path):
         """
         Change the current working directory to the given path.
@@ -647,6 +673,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def chmod(self, path, mode):
         """
         Change mode of path
@@ -660,6 +687,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def chown(self, path, uid, gid):
         """
         Change owner and group id of path
@@ -701,6 +729,7 @@ class Volume(object):
         """
         return self.stat(path).st_ctime
 
+    @validate_mount
     def getcwd(self):
         """
         Returns current working directory.
@@ -726,6 +755,7 @@ class Volume(object):
         """
         return self.stat(path).st_size
 
+    @validate_mount
     def getxattr(self, path, key, size=0):
         """
         Retrieve the value of the extended attribute identified by key
@@ -805,6 +835,7 @@ class Volume(object):
                 dir_list.append(name)
         return dir_list
 
+    @validate_mount
     def listxattr(self, path, size=0):
         """
         Retrieve list of extended attribute keys for the specified path.
@@ -846,6 +877,7 @@ class Volume(object):
         xattrs.sort()
         return xattrs
 
+    @validate_mount
     def lstat(self, path):
         """
         Return stat information of path. If path is a symbolic link, then it
@@ -884,6 +916,7 @@ class Volume(object):
                 return
         self.mkdir(path, mode)
 
+    @validate_mount
     def mkdir(self, path, mode=0777):
         """
         Create a directory named path with numeric mode mode.
@@ -896,6 +929,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def fopen(self, path, mode='r'):
         """
         Similar to Python's built-in File object returned by Python's open()
@@ -936,6 +970,7 @@ class Volume(object):
                 raise OSError(err, os.strerror(err))
             return File(fd, path=path, mode=mode)
 
+    @validate_mount
     def open(self, path, flags, mode=0777):
         """
         Similar to Python's os.open()
@@ -965,6 +1000,7 @@ class Volume(object):
 
         return fd
 
+    @validate_mount
     def opendir(self, path):
         """
         Open a directory.
@@ -979,6 +1015,7 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return Dir(fd)
 
+    @validate_mount
     def readlink(self, path):
         """
         Return a string representing the path to which the symbolic link
@@ -1005,6 +1042,7 @@ class Volume(object):
         """
         return self.unlink(path)
 
+    @validate_mount
     def removexattr(self, path, key):
         """
         Remove a extended attribute of the path.
@@ -1018,6 +1056,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def rename(self, src, dst):
         """
         Rename the file or directory from src to dst. If dst is a directory,
@@ -1031,6 +1070,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def rmdir(self, path):
         """
         Remove (delete) the directory path. Only works when the directory is
@@ -1112,6 +1152,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def setxattr(self, path, key, value, flags=0):
         """
         Set extended attribute of the path.
@@ -1134,6 +1175,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def stat(self, path):
         """
         Returns stat information of path.
@@ -1147,6 +1189,7 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return s
 
+    @validate_mount
     def statvfs(self, path):
         """
         Returns information about a mounted glusterfs volume. path is the
@@ -1167,6 +1210,7 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return s
 
+    @validate_mount
     def symlink(self, source, link_name):
         """
         Create a symbolic link 'link_name' which points to 'source'
@@ -1178,6 +1222,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def unlink(self, path):
         """
         Delete the file 'path'
@@ -1189,6 +1234,7 @@ class Volume(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
+    @validate_mount
     def utime(self, path, times):
         """
         Set the access and modified times of the file specified by path. If

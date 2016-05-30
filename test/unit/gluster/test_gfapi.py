@@ -11,6 +11,7 @@
 
 import unittest
 import gluster
+import inspect
 import os
 import stat
 import time
@@ -69,6 +70,36 @@ class TestFile(unittest.TestCase):
 
     def tearDown(self):
         gluster.gfapi.api.glfs_close = self._saved_glfs_close
+
+    def test_validate_init(self):
+        self.assertRaises(ValueError, File, None)
+        self.assertRaises(ValueError, File, "not_int")
+
+        try:
+            with File(None) as f:
+                pass
+        except ValueError:
+            pass
+        else:
+            self.fail("Expecting ValueError")
+
+        try:
+            with File("not_int") as f:
+                pass
+        except ValueError:
+            pass
+        else:
+            self.fail("Expecting ValueError")
+
+    def test_validate_glfd_decorator_applied(self):
+        for method_name, method_instance in \
+                inspect.getmembers(File, predicate=inspect.ismethod):
+            if not method_name.startswith('_'):
+                try:
+                    wrapper_attribute = method_instance.__wrapped__.__name__
+                    self.assertEqual(wrapper_attribute, method_name)
+                except AttributeError:
+                    self.fail("Method File.%s isn't decorated" % (method_name))
 
     def test_fchmod_success(self):
         mock_glfs_fchmod = Mock()
