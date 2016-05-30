@@ -115,6 +115,13 @@ class Dirent (ctypes.Structure):
     ]
 
 
+class Timespec (ctypes.Structure):
+    _fields_ = [
+        ('tv_sec', ctypes.c_long),
+        ('tv_nsec', ctypes.c_long)
+    ]
+
+
 # Here is the reference card of libgfapi library exported
 # apis with its different versions.
 #
@@ -474,12 +481,22 @@ glfs_getcwd = gfapi_prototype('glfs_getcwd', ctypes.c_char_p,
                               ctypes.c_char_p,
                               ctypes.c_size_t)
 
+glfs_fallocate = gfapi_prototype('glfs_fallocate', ctypes.c_int,
+                                 ctypes.c_void_p,
+                                 ctypes.c_int,
+                                 ctypes.c_size_t)
 
-# TODO: # discard and fallocate fails with "AttributeError: /lib64/libgfapi.so.0: undefined symbol: glfs_discard", # noqa
-#  for time being, using it from api.* # noqa
-# glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
-# _glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t) # noqa
-#                                   (('glfs_fallocate', client)) # noqa
+glfs_discard = gfapi_prototype('glfs_discard', ctypes.c_int,
+                               ctypes.c_void_p,
+                               ctypes.c_int,
+                               ctypes.c_size_t)
 
-# glfs_discard = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_size_t)(('glfs_discard', client)) # noqa
-# glfs_fallocate = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_ulong, ctypes.c_size_t)(('glfs_fallocate', client)) # noqa
+glfs_zerofill = gfapi_prototype('glfs_zerofill', ctypes.c_int,
+                                ctypes.c_void_p,
+                                ctypes.c_int,
+                                ctypes.c_size_t)
+
+glfs_utimens = gfapi_prototype('glfs_utimens', ctypes.c_int,
+                               ctypes.c_void_p,
+                               ctypes.c_char_p,
+                               ctypes.POINTER(Timespec))

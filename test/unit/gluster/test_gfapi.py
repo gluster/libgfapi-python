@@ -13,6 +13,8 @@ import unittest
 import gluster
 import os
 import stat
+import time
+import math
 import errno
 
 from gluster.gfapi import File, Dir, Volume
@@ -997,3 +999,35 @@ class TestVolume(unittest.TestCase):
             for (path, dirs, files) in self.vol.walk("dir1",
                                                      onerror=mock_onerror):
                 pass
+
+    def test_utime(self):
+        # Test times arg being invalid.
+        for junk in ('a', 1234.1234, (1, 2, 3), (1)):
+            self.assertRaises(TypeError, self.vol.utime, '/path', junk)
+
+        # Test times = None
+        mock_glfs_utimens = Mock(return_value=1)
+        mock_time = Mock(return_value=12345.6789)
+        with patch("gluster.gfapi.api.glfs_utimens", mock_glfs_utimens):
+            with patch("time.time", mock_time):
+                self.vol.utime('/path', None)
+        self.assertTrue(mock_glfs_utimens.called)
+        self.assertTrue(mock_time.called)
+
+        # Test times passed as arg
+        mock_glfs_utimens.reset_mock()
+        atime = time.time()
+        mtime = time.time()
+        with patch("gluster.gfapi.api.glfs_utimens", mock_glfs_utimens):
+            self.vol.utime('/path', (atime, mtime))
+        self.assertTrue(mock_glfs_utimens.called)
+        self.assertEqual(mock_glfs_utimens.call_args[0][1], '/path')
+        # verify atime and mtime
+        self.assertEqual(mock_glfs_utimens.call_args[0][2][0].tv_sec,
+                         int(atime))
+        self.assertEqual(mock_glfs_utimens.call_args[0][2][0].tv_nsec,
+                         int(math.modf(atime)[0] * 1e9))
+        self.assertEqual(mock_glfs_utimens.call_args[0][2][1].tv_sec,
+                         int(mtime))
+        self.assertEqual(mock_glfs_utimens.call_args[0][2][1].tv_nsec,
+                         int(math.modf(mtime)[0] * 1e9))

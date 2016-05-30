@@ -443,6 +443,65 @@ class FileOpsTest(unittest.TestCase):
             # So should be the content.
             self.assertEqual(f.read(), "12345")
 
+    def test_fallocate(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.fallocate(0, 0, 10)
+            f.fsync()
+            # Stat information should now show the allocated size.
+            self.assertEqual(f.fstat().st_size, 10)
+
+    def test_discard(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
+            f.fallocate(0, 0, 10)
+            f.fsync()
+            self.assertEqual(f.fstat().st_size, 10)
+            # We can't really know if the blocks were actually returned
+            # to filesystem. This functional test only tests if glfs_discard
+            # interfacing is proper and that it returns successfully.
+            f.discard(4, 5)
+
+    def test_zerofill(self):
+        name = uuid4().hex
+        with File(self.vol.open(name, os.O_RDWR | os.O_CREAT)) as f:
+            f.write('0123456789')
+            f.fsync()
+            self.assertEqual(f.fstat().st_size, 10)
+            f.lseek(0, os.SEEK_SET)
+            self.assertEqual(f.read(), '0123456789')
+            f.zerofill(3, 6)
+            f.lseek(0, os.SEEK_SET)
+            data = f.read()
+            self.assertEqual(data, '012\x00\x00\x00\x00\x00\x009')
+            self.assertEqual(len(data), 10)
+
+    def test_utime(self):
+        # Create a file
+        name = uuid4().hex
+        self.vol.fopen(name, 'w').close()
+
+        # Test times arg being invalid
+        for junk in ('a', 1234.1234, (1, 2, 3), (1)):
+            self.assertRaises(TypeError, self.vol.utime, name, junk)
+
+        # Test normal success
+        # Mission Report: December 16th, 1991
+        (atime, mtime) = (692884800, 692884800)
+        self.vol.utime(name, (atime, mtime))
+        st = self.vol.stat(name)
+        self.assertEqual(st.st_atime, atime)
+        self.assertEqual(st.st_mtime, mtime)
+
+        # Test times = None
+        self.vol.utime(name, None)
+        new_st = self.vol.stat(name)
+        self.assertTrue(new_st.st_atime > st.st_atime)
+        self.assertTrue(new_st.st_mtime > st.st_mtime)
+
+        # Non-existent file
+        self.assertRaises(OSError, self.vol.utime, 'non-existent-file', None)
+
     def test_flistxattr(self):
         name = uuid4().hex
         with File(self.vol.open(name, os.O_RDWR | os.O_CREAT)) as f:

@@ -11,6 +11,8 @@
 
 import ctypes
 import os
+import math
+import time
 import stat
 import errno
 from gluster import api
@@ -87,7 +89,7 @@ class File(object):
             self._closed = True
 
     def discard(self, offset, len):
-        ret = api.client.glfs_discard(self.fd, offset, len)
+        ret = api.glfs_discard(self.fd, offset, len)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -111,7 +113,7 @@ class File(object):
         :param offset: Starting offset
         :param length: Size in bytes, starting at offset
         """
-        ret = api.client.glfs_fallocate(self.fd, mode, offset, length)
+        ret = api.glfs_fallocate(self.fd, mode, offset, length)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -369,6 +371,12 @@ class File(object):
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return ret
+
+    def zerofill(self, offset, length):
+        ret = api.glfs_zerofill(self.fd, offset, length)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
 
 
 class Dir(object):
@@ -1032,6 +1040,39 @@ class Volume(object):
         :returns: 0 if success, raises OSError if it fails
         """
         ret = api.glfs_unlink(self.fs, path)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
+    def utime(self, path, times):
+        """
+        Set the access and modified times of the file specified by path. If
+        times is None, then the file's access and modified times are set to
+        the current time. (The effect is similar to running the Unix program
+        touch on the path.) Otherwise, times must be a 2-tuple of numbers,
+        of the form (atime, mtime) which is used to set the access and
+        modified times, respectively.
+        """
+        if times is None:
+            now = time.time()
+            times = (now, now)
+        else:
+            if type(times) is not tuple or len(times) != 2:
+                raise TypeError("utime() arg 2 must be a tuple (atime, mtime)")
+
+        timespec_array = (api.Timespec * 2)()
+
+        # Set atime
+        decimal, whole = math.modf(times[0])
+        timespec_array[0].tv_sec = int(whole)
+        timespec_array[0].tv_nsec = int(decimal * 1e9)
+
+        # Set mtime
+        decimal, whole = math.modf(times[1])
+        timespec_array[1].tv_sec = int(whole)
+        timespec_array[1].tv_nsec = int(decimal * 1e9)
+
+        ret = api.glfs_utimens(self.fs, path, timespec_array)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
