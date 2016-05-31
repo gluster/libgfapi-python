@@ -402,6 +402,11 @@ glfs_rename = gfapi_prototype('glfs_rename', ctypes.c_int,
                               ctypes.c_char_p,
                               ctypes.c_char_p)
 
+glfs_link = gfapi_prototype('glfs_link', ctypes.c_int,
+                            ctypes.c_void_p,
+                            ctypes.c_char_p,
+                            ctypes.c_char_p)
+
 glfs_symlink = gfapi_prototype('glfs_symlink', ctypes.c_int,
                                ctypes.c_void_p,
                                ctypes.c_char_p,

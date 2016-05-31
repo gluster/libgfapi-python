@@ -16,7 +16,7 @@ import time
 import stat
 import errno
 from gluster import api
-from gluster.exceptions import LibgfapiException
+from gluster.exceptions import LibgfapiException, Error
 from gluster.utils import validate_mount, validate_glfd
 
 # TODO: Move this utils.py
@@ -1211,6 +1211,18 @@ class Volume(object):
         return s
 
     @validate_mount
+    def link(self, source, link_name):
+        """
+        Create a hard link pointing to source named link_name.
+
+        :raises: OSError on failure
+        """
+        ret = api.glfs_link(self.fs, source, link_name)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
+    @validate_mount
     def symlink(self, source, link_name):
         """
         Create a symbolic link 'link_name' which points to 'source'
@@ -1307,3 +1319,136 @@ class Volume(object):
                     yield x
         if not topdown:
             yield top, dirs, nondirs
+
+    def samefile(self, path1, path2):
+        """
+        Return True if both pathname arguments refer to the same file or
+        directory (as indicated by device number and inode number). Raise an
+        exception if a stat() call on either pathname fails.
+
+        :param path1: Path to one file
+        :param path2: Path to another file
+        :raises: OSError if stat() fails
+        """
+        s1 = self.stat(path1)
+        s2 = self.stat(path2)
+        return s1.st_ino == s2.st_ino and s1.st_dev == s2.st_dev
+
+    @classmethod
+    def copyfileobj(self, fsrc, fdst, length=128 * 1024):
+        """
+        Copy the contents of the file-like object fsrc to the file-like object
+        fdst. The integer length, if given, is the buffer size. Note that if
+        the current file position of the fsrc object is not 0, only the
+        contents from the current file position to the end of the file will be
+        copied.
+
+        :param fsrc: Source file object
+        :param fdst: Destination file object
+        :param length: Size of buffer in bytes to be used in copying
+        :raises: OSError on failure
+        """
+        buf = bytearray(length)
+        while True:
+            nread = fsrc.readinto(buf)
+            if not nread or nread <= 0:
+                break
+            if nread == length:
+                # Entire buffer is filled, do not slice.
+                fdst.write(buf)
+            else:
+                # TODO:
+                # Use memoryview to avoid internal copy done on slicing.
+                fdst.write(buf[0:nread])
+
+    def copyfile(self, src, dst):
+        """
+        Copy the contents (no metadata) of the file named src to a file named
+        dst. dst must be the complete target file name.  If src and dst are
+        the same, Error is raised. The destination location must be writable.
+        If dst already exists, it will be replaced. Special files such as
+        character or block devices and pipes cannot be copied with this
+        function. src and dst are path names given as strings.
+
+        :param src: Path of source file
+        :param dst: Path of destination file
+        :raises: Error if src and dst file are same file.
+                 OSError on failure to read/write.
+        """
+        _samefile = False
+        try:
+            _samefile = self.samefile(src, dst)
+        except OSError:
+            # Dst file need not exist.
+            pass
+
+        if _samefile:
+            raise Error("`%s` and `%s` are the same file" % (src, dst))
+
+        with self.fopen(src, 'rb') as fsrc:
+            with self.fopen(dst, 'wb') as fdst:
+                self.copyfileobj(fsrc, fdst)
+
+    def copymode(self, src, dst):
+        """
+        Copy the permission bits from src to dst. The file contents, owner,
+        and group are unaffected. src and dst are path names given as strings.
+
+        :param src: Path of source file
+        :param dst: Path of destination file
+        :raises: OSError on failure.
+        """
+        st = self.stat(src)
+        mode = stat.S_IMODE(st.st_mode)
+        self.chmod(dst, mode)
+
+    def copystat(self, src, dst):
+        """
+        Copy the permission bits, last access time, last modification time,
+        and flags from src to dst. The file contents, owner, and group are
+        unaffected. src and dst are path names given as strings.
+
+        :param src: Path of source file
+        :param dst: Path of destination file
+        :raises: OSError on failure.
+        """
+        st = self.stat(src)
+        mode = stat.S_IMODE(st.st_mode)
+        self.utime(dst, (st.st_atime, st.st_mtime))
+        self.chmod(dst, mode)
+        # TODO: Handle st_flags on FreeBSD
+
+    def copy(self, src, dst):
+        """
+        Copy data and mode bits ("cp src dst")
+
+        Copy the file src to the file or directory dst. If dst is a directory,
+        a file with the same basename as src is created (or overwritten) in
+        the directory specified. Permission bits are copied. src and dst are
+        path names given as strings.
+
+        :param src: Path of source file
+        :param dst: Path of destination file or directory
+        :raises: OSError on failure
+        """
+        if self.isdir(dst):
+            dst = os.path.join(dst, os.path.basename(src))
+        self.copyfile(src, dst)
+        self.copymode(src, dst)
+
+    def copy2(self, src, dst):
+        """
+        Similar to copy(), but metadata is copied as well - in fact, this is
+        just copy() followed by copystat(). This is similar to the Unix command
+        cp -p.
+
+        The destination may be a directory.
+
+        :param src: Path of source file
+        :param dst: Path of destination file or directory
+        :raises: OSError on failure
+        """
+        if self.isdir(dst):
+            dst = os.path.join(dst, os.path.basename(src))
+        self.copyfile(src, dst)
+        self.copystat(src, dst)

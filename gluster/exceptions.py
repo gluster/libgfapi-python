@@ -20,3 +20,7 @@ class LibgfapiException(Exception):
 
 class VolumeNotMounted(LibgfapiException):
     pass
+
+
+class Error(EnvironmentError):
+    pass
