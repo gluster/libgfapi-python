@@ -41,7 +41,7 @@ with volume.fopen('somefile.txt', 'r') as f:
 volume.unlink('somefile.txt')
 
 # Unmount the volume
-volume.unmount()
+volume.umount()
 ```
 
 ### TODOs

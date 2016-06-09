@@ -44,7 +44,7 @@ Example Usage
     volume.unlink('somefile.txt')
 
     # Unmount the volume
-    volume.unmount()
+    volume.umount()
 
 
 API Reference
