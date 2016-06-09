@@ -1,59 +1,57 @@
-# Overview
+### Overview
 
-Python bindings for the [GlusterFS](http://www.gluster.org) libgfapi interface
+This is the official python bindings for the
+[GlusterFS](http://www.gluster.org) libgfapi C library interface.
 
-# Installation
+Complete API reference and documentation can be found at
+[ReadTheDocs](http://libgfapi-python.readthedocs.io/)
 
-1) Clone the git repo
+### Installation
 
 ```
 $ git clone https://review.gluster.org/libgfapi-python
 $ cd libgfapi-python
-```
-
-2) Run the setup script
-
-```
 $ sudo python setup.py install
 ```
-# Usage
+
+### Example Usage
 
 ```python
 from gluster import gfapi
-import os
 
-## Create virtual mount
-volume = gfapi.Volume(....)
+# Create virtual mount
+volume = gfapi.Volume('10.7.1.99', 'datavolume')
 volume.mount()
 
-## Create a new directory
-volume.mkdir('newdir', 0755)
+# Create directory
+volume.mkdir('dir1', 0755)
 
-## Create a new directory recursively
-volume.makedirs('/somedir/dir',0755)
+# List directories
+volume.listdir('/')
 
-## Delete a directory
-volume.rmdir('/somedir/dir')
+# Create new file and write to it
+with volume.fopen('somefile.txt', 'w+') as f:
+    f.write("Winter is coming.")
 
-## Create a file from a string using fopen.  w+: open file for reading and writing
-with volume.fopen('somefile.txt', 'w+') as fd:
-    fd.write("shadowfax")
+# Open and read file
+with volume.fopen('somefile.txt', 'r') as f:
+  print f.read()
 
-## Read a file.  r: open file for only reading
-with volume.fopen('somefile.txt', 'r') as fd:
-  print fd.read()
-
-## Write to an existing file. a+:  open a file for reading and appending
-with volume.fopen('somefile.txt','a+') as fd:
-  fd.write("\n some new line in our file")
-
-## Delete a file
+# Delete file
 volume.unlink('somefile.txt')
 
-## Unmount a volume
+# Unmount the volume
 volume.unmount()
-
 ```
-# Development
 
-* [Developer Guide](doc/markdown/dev_guide.md)
+### TODOs
+
+* Submit to pypy to enable installing using pip
+* Add support for py3
+* Implement async I/O APIs
+* Implement file locking APIs
+* Implement os.scandir() like API that leverages d\_type
+* Improve Volume.walk() by leveraging scandir.
+* Test and allow protocols other than TCP such as rdma and socket.
+
+Please follow the [Developer Guide](doc/markdown/dev_guide.md) to contribute code.

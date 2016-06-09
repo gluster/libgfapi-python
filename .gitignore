@@ -7,3 +7,4 @@ cover
 pycscope.*
 build
 dist
+doc/_build

@@ -43,6 +43,13 @@ _populate_mode_to_flags_dict()
 class File(object):
 
     def __init__(self, fd, path=None, mode=None):
+        """
+        Create a File object equivalent to Python's built-in File object.
+
+        :param fd: glfd pointer
+        :param path: Path of the file. This is optional.
+        :param mode: The I/O mode of the file.
+        """
         self.fd = fd
         self.originalpath = path
         self._mode = mode
@@ -61,25 +68,44 @@ class File(object):
 
     @property
     def fileno(self):
+        """
+        Return the internal file descriptor (glfd) that is used by the
+        underlying implementation to request I/O operations.
+        """
         # TODO: Make self.fd private (self._fd)
         return self.fd
 
     @property
     def mode(self):
+        """
+        The I/O mode for the file. If the file was created using the
+        Volume.fopen() function, this will be the value of the mode
+        parameter. This is a read-only attribute.
+        """
         return self._mode
 
     @property
     def name(self):
+        """
+        If the file object was created using Volume.fopen(),
+        the name of the file.
+        """
         return self.originalpath
 
     @property
     def closed(self):
+        """
+        Bool indicating the current state of the file object. This is a
+        read-only attribute; the close() method changes the value.
+        """
         return self._closed
 
     def close(self):
         """
         Close the file. A closed file cannot be read or written any more.
         Calling close() more than once is allowed.
+
+        :raises: OSError on failure
         """
         if not self._closed:
             ret = api.glfs_close(self.fd)
@@ -88,13 +114,32 @@ class File(object):
                 raise OSError(err, os.strerror(err))
             self._closed = True
 
-    def discard(self, offset, len):
-        ret = api.glfs_discard(self.fd, offset, len)
+    def discard(self, offset, length):
+        """
+        This is similar to UNMAP command that is used to return the
+        unused/freed blocks back to the storage system. In this
+        implementation, fallocate with FALLOC_FL_PUNCH_HOLE is used to
+        eventually release the blocks to the filesystem. If the brick has
+        been mounted with '-o discard' option, then the discard request
+        will eventually reach the SCSI storage if the storage device
+        supports UNMAP.
+
+        :param offset: Starting offset
+        :param len: Length or size in bytes to discard
+        :raises: OSError on failure
+        """
+        ret = api.glfs_discard(self.fd, offset, length)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
 
     def dup(self):
+        """
+        Return a duplicate of File object. This duplicate File class instance
+        encapsulates a duplicate glfd obtained by invoking glfs_dup().
+
+        :raises: OSError on failure
+        """
         dupfd = api.glfs_dup(self.fd)
         if not dupfd:
             err = ctypes.get_errno()
@@ -112,6 +157,7 @@ class File(object):
         :param mode: Operation to be performed on the given range
         :param offset: Starting offset
         :param length: Size in bytes, starting at offset
+        :raises: OSError on failure
         """
         ret = api.glfs_fallocate(self.fd, mode, offset, length)
         if ret < 0:
@@ -123,6 +169,7 @@ class File(object):
         Change this file's mode
 
         :param mode: new mode
+        :raises: OSError on failure
         """
         ret = api.glfs_fchmod(self.fd, mode)
         if ret < 0:
@@ -135,6 +182,7 @@ class File(object):
 
         :param uid: new user id for file
         :param gid: new group id for file
+        :raises: OSError on failure
         """
         ret = api.glfs_fchown(self.fd, uid, gid)
         if ret < 0:
@@ -145,6 +193,8 @@ class File(object):
         """
         Flush buffer cache pages pertaining to data, but not the ones
         pertaining to metadata.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_fdatasync(self.fd)
         if ret < 0:
@@ -170,6 +220,7 @@ class File(object):
                      If size is non-zero, it is assumed the caller knows
                      the size of xattr.
         :returns: Value of extended attribute corresponding to key specified.
+        :raises: OSError on failure
         """
         if size == 0:
             size = api.glfs_fgetxattr(self.fd, key, None, size)
@@ -193,6 +244,7 @@ class File(object):
                      If size is non-zero, it is assumed the caller knows
                      the size of the list.
         :returns: List of extended attributes.
+        :raises: OSError on failure
         """
         if size == 0:
             size = api.glfs_flistxattr(self.fd, None, 0)
@@ -229,13 +281,14 @@ class File(object):
 
         :param key: The key of extended attribute.
         :param value: The valiue of extended attribute.
-        :param flags: Possible values are 0 (default), 1 and 2
-                      0: xattr will be created if it does not exist, or the
-                         value will be replaced if the xattr exists.
-                      1: Perform a pure create, which fails if the named
-                         attribute already exists.
-                      2: Perform a pure replace operation, which fails if the
-                         named attribute does not already exist.
+        :param flags: Possible values are 0 (default), 1 and 2.
+                      If 0 - xattr will be created if it does not exist, or
+                      the value will be replaced if the xattr exists. If 1 -
+                      it performs a pure create, which fails if the named
+                      attribute already exists. If 2 - it performs a pure
+                      replace operation, which fails if the named attribute
+                      does not already exist.
+        :raises: OSError on failure
         """
         ret = api.glfs_fsetxattr(self.fd, key, value, len(value), flags)
         if ret < 0:
@@ -247,6 +300,7 @@ class File(object):
         Remove a extended attribute of the file.
 
         :param key: The key of extended attribute.
+        :raises: OSError on failure
         """
         ret = api.glfs_fremovexattr(self.fd, key)
         if ret < 0:
@@ -258,6 +312,7 @@ class File(object):
         Returns Stat object for this file.
 
         :return: Returns the stat information of the file.
+        :raises: OSError on failure
         """
         s = api.Stat()
         rc = api.glfs_fstat(self.fd, ctypes.byref(s))
@@ -269,6 +324,8 @@ class File(object):
     def fsync(self):
         """
         Flush buffer cache pages pertaining to data and metadata.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_fsync(self.fd)
         if ret < 0:
@@ -284,6 +341,7 @@ class File(object):
         extended part reads as null bytes.
 
         :param length: Length to truncate the file to in bytes.
+        :raises: OSError on failure
         """
         ret = api.glfs_ftruncate(self.fd, length)
         if ret < 0:
@@ -301,6 +359,7 @@ class File(object):
                     to the current position and SEEK_END sets the position
                     relative to the end of the file.
         :returns: the new offset position
+        :raises: OSError on failure
         """
         ret = api.glfs_lseek(self.fd, pos, how)
         if ret < 0:
@@ -315,6 +374,7 @@ class File(object):
         :param buflen: length of read buffer. If less than 0, then whole
                        file is read. Default is -1.
         :returns: buffer of 'size' length
+        :raises: OSError on failure
         """
         if size < 0:
             size = self.fgetsize()
@@ -339,7 +399,8 @@ class File(object):
         it's invoked, readinto() copies data to an already allocated
         buffer passed to it.
 
-        Returns the number of bytes read (0 for EOF).
+        :returns: the number of bytes read (0 for EOF).
+        :raises: OSError on failure
         """
         if type(buf) is bytearray:
             buf_ptr = (ctypes.c_ubyte * len(buf)).from_buffer(buf)
@@ -358,6 +419,7 @@ class File(object):
 
         :param data: The data to be written to file.
         :returns: The size in bytes actually written
+        :raises: OSError on failure
         """
         # creating a ctypes.c_ubyte buffer to handle converting bytearray
         # to the required C data type
@@ -373,6 +435,13 @@ class File(object):
         return ret
 
     def zerofill(self, offset, length):
+        """
+        Fill 'length' number of bytes with zeroes starting from 'offset'.
+
+        :param offset: Start at offset location
+        :param length: Size/length in bytes
+        :raises: OSError on failure
+        """
         ret = api.glfs_zerofill(self.fd, offset, length)
         if ret < 0:
             err = ctypes.get_errno()
@@ -422,11 +491,12 @@ class Volume(object):
         :param log_level: Integer specifying the degree of verbosity.
                           Higher the value, more verbose the logging.
 
-        TODO: Provide an interface where user can specify volfile directly
-        instead of providing host and other details. This is helpful in cases
-        where user wants to load some non default xlator on client side. For
-        example, aux-gfid-mount or mount volume as read-only.
         """
+        # TODO: Provide an interface where user can specify volfile directly
+        # instead of providing host and other details. This is helpful in cases
+        # where user wants to load some non default xlator on client side. For
+        # example, aux-gfid-mount or mount volume as read-only.
+
         # Add a reference so the module-level variable "api" doesn't
         # get yanked out from under us (see comment above File def'n).
         self._api = api
@@ -451,11 +521,18 @@ class Volume(object):
 
     @property
     def mounted(self):
+        """
+        Read-only attribute that returns True if the volume is mounted.
+        The value of the attribute is internally changed on invoking
+        mount() and umount() functions.
+        """
         return self._mounted
 
     def mount(self):
         """
         Mount a GlusterFS volume for use.
+
+        :raises: LibgfapiException on failure
         """
         if self.fs and self._mounted:
             # Already mounted
@@ -493,6 +570,8 @@ class Volume(object):
 
         Provides users a way to free resources instead of just waiting for
         python garbage collector to call __del__() at some point later.
+
+        :raises: LibgfapiException on failure
         """
         if self.fs:
             ret = self._api.glfs_fini(self.fs)
@@ -561,6 +640,7 @@ class Volume(object):
         Change the current working directory to the given path.
 
         :param path: Path to change current working directory to
+        :raises: OSError on failure
         """
         ret = api.glfs_chdir(self.fs, path)
         if ret < 0:
@@ -572,8 +652,8 @@ class Volume(object):
         Change mode of path
 
         :param path: the item to be modified
-        :mode: new mode
-        :returns: 0 if success, raises OSError if it fails
+        :param mode: new mode
+        :raises: OSError on failure
         """
         ret = api.glfs_chmod(self.fs, path, mode)
         if ret < 0:
@@ -584,10 +664,10 @@ class Volume(object):
         """
         Change owner and group id of path
 
-        :param path: the item to be modified
-        :param uid: new user id for item
-        :param gid: new group id for item
-        :returns: 0 if success, raises OSError if it fails
+        :param path: the path to be modified
+        :param uid: new user id for path
+        :param gid: new group id for path
+        :raises: OSError on failure
         """
         ret = api.glfs_chown(self.fs, path, uid, gid)
         if ret < 0:
@@ -596,8 +676,10 @@ class Volume(object):
 
     def exists(self, path):
         """
-        Test whether a path exists.
-        Returns False for broken symbolic links.
+        Returns True if path refers to an existing path. Returns False for
+        broken symbolic links. This function may return False if permission is
+        not granted to execute stat() on the requested file, even if the path
+        physically exists.
         """
         try:
             self.stat(path)
@@ -607,15 +689,15 @@ class Volume(object):
 
     def getatime(self, path):
         """
-        Returns the last access time as reported by stat
+        Returns the last access time as reported by stat()
         """
         return self.stat(path).st_atime
 
     def getctime(self, path):
         """
-        Returns the time when changes were made to the path as reported by stat
-        This time is updated when changes are made to the file or dir's inode
-        or the contents of the file
+        Returns the time when changes were made to the path as reported by
+        stat(). This time is updated when changes are made to the file or
+        dir's inode or the contents of the file
         """
         return self.stat(path).st_ctime
 
@@ -634,15 +716,15 @@ class Volume(object):
     def getmtime(self, path):
         """
         Returns the time when changes were made to the content of the path
-        as reported by stat
+        as reported by stat()
         """
         return self.stat(path).st_mtime
 
-    def getsize(self, filename):
+    def getsize(self, path):
         """
-        Return the size of a file, reported by stat()
+        Return the size of a file in bytes, reported by stat()
         """
-        return self.stat(filename).st_size
+        return self.stat(path).st_size
 
     def getxattr(self, path, key, size=0):
         """
@@ -656,6 +738,7 @@ class Volume(object):
                      If size is non-zero, it is assumed the caller knows
                      the size of xattr.
         :returns: Value of extended attribute corresponding to key specified.
+        :raises: OSError on failure
         """
         if size == 0:
             size = api.glfs_getxattr(self.fs, path, key, None, 0)
@@ -672,7 +755,8 @@ class Volume(object):
 
     def isdir(self, path):
         """
-        Test whether a path is an existing directory
+        Returns True if path is an existing directory. Returns False on all
+        failure cases including when path does not exist.
         """
         try:
             s = self.stat(path)
@@ -682,7 +766,8 @@ class Volume(object):
 
     def isfile(self, path):
         """
-        Test whether a path is a regular file
+        Return True if path is an existing regular file. Returns False on all
+        failure cases including when path does not exist.
         """
         try:
             s = self.stat(path)
@@ -692,7 +777,9 @@ class Volume(object):
 
     def islink(self, path):
         """
-        Test whether a path is a symbolic link
+        Return True if path refers to a directory entry that is a symbolic
+        link. Returns False on all failure cases including when path does
+        not exist.
         """
         try:
             s = self.lstat(path)
@@ -702,8 +789,10 @@ class Volume(object):
 
     def listdir(self, path):
         """
-        Return list of entries in a given directory 'path'.
-        "." and ".." are not included, and the list is not sorted.
+        Return a list containing the names of the entries in the directory
+        given by path. The list is in arbitrary order. It does not include
+        the special entries '.' and '..' even if they are present in the
+        directory.
         """
         dir_list = []
         d = self.opendir(path)
@@ -712,7 +801,7 @@ class Volume(object):
             if not isinstance(ent, api.Dirent):
                 break
             name = ent.d_name[:ent.d_reclen]
-            if name not in [".", ".."]:
+            if name not in (".", ".."):
                 dir_list.append(name)
         return dir_list
 
@@ -726,6 +815,7 @@ class Volume(object):
                      If size is non-zero, it is assumed the caller knows
                      the size of the list.
         :returns: List of extended attribute keys.
+        :raises: OSError on failure
         """
         if size == 0:
             size = api.glfs_listxattr(self.fs, path, None, 0)
@@ -761,6 +851,8 @@ class Volume(object):
         Return stat information of path. If path is a symbolic link, then it
         returns information about the link itself, not the file that it refers
         to.
+
+        :raises: OSError on failure
         """
         s = api.Stat()
         rc = api.glfs_lstat(self.fs, path, ctypes.byref(s))
@@ -769,11 +861,17 @@ class Volume(object):
             raise OSError(err, os.strerror(err))
         return s
 
-    def makedirs(self, name, mode=0777):
+    def makedirs(self, path, mode=0777):
         """
-        Create directories defined in 'name' recursively.
+        Recursive directory creation function. Like mkdir(), but makes all
+        intermediate-level directories needed to contain the leaf directory.
+        The default mode is 0777 (octal).
+
+        :raises: OSError if the leaf directory already exists or cannot be
+                 created. Can also raise OSError if creation of any non-leaf
+                 directories fails.
         """
-        head, tail = os.path.split(name)
+        head, tail = os.path.split(path)
         if not tail:
             head, tail = os.path.split(head)
         if head and tail and not self.exists(head):
@@ -784,11 +882,14 @@ class Volume(object):
                     raise
             if tail == os.curdir:
                 return
-        self.mkdir(name, mode)
+        self.mkdir(path, mode)
 
     def mkdir(self, path, mode=0777):
         """
-        Create a directory
+        Create a directory named path with numeric mode mode.
+        The default mode is 0777 (octal).
+
+        :raises: OSError on failure
         """
         ret = api.glfs_mkdir(self.fs, path, mode)
         if ret < 0:
@@ -803,9 +904,21 @@ class Volume(object):
         and it does NOT invoke glibc's fopen and does NOT do any kind of
         I/O bufferring as of today.
 
+        The most commonly-used values of mode are 'r' for reading, 'w' for
+        writing (truncating the file if it already exists), and 'a' for
+        appending. If mode is omitted, it defaults to 'r'.
+
+        Modes 'r+', 'w+' and 'a+' open the file for updating (reading and
+        writing); note that 'w+' truncates the file.
+
+        Append 'b' to the mode to open the file in binary mode but this has
+        no effect as of today.
+
         :param path: Path of file to be opened
         :param mode: Mode to open the file with. This is a string.
         :returns: an instance of File class
+        :raises: OSError on failure to create/open file.
+                 TypeError and ValueError if mode is invalid.
         """
         if not isinstance(mode, basestring):
             raise TypeError("Mode must be a string")
@@ -834,8 +947,10 @@ class Volume(object):
         :param flags: Integer which flags must include one of the following
                       access modes: os.O_RDONLY, os.O_WRONLY, or os.O_RDWR.
         :param mode: specifies the permissions to use in case a new
-                     file is created.
-        :returns: the raw glfd
+                     file is created. The default mode is 0777 (octal)
+        :returns: the raw glfd (pointer to memory in C, number in python)
+        :raises: OSError on failure to create/open file.
+                 TypeError if flags is not an integer.
         """
         if not isinstance(flags, int):
             raise TypeError("flags must evaluate to an integer")
@@ -856,6 +971,7 @@ class Volume(object):
 
         :param path: Path to the directory
         :returns: Returns a instance of Dir class
+        :raises: OSError on failure
         """
         fd = api.glfs_opendir(self.fs, path)
         if not fd:
@@ -865,10 +981,12 @@ class Volume(object):
 
     def readlink(self, path):
         """
-        Read contents of symbolic link path.
+        Return a string representing the path to which the symbolic link
+        points. The result may be either an absolute or relative pathname.
 
         :param path: Path of symbolic link
         :returns: Contents of symlink
+        :raises: OSError on failure
         """
         PATH_MAX = 4096
         buf = ctypes.create_string_buffer(PATH_MAX)
@@ -880,17 +998,20 @@ class Volume(object):
 
     def remove(self, path):
         """
-        Remove (delete) the file path. If path is a directory,
-        OSError is raised.
+        Remove (delete) the file path. If path is a directory, OSError
+        is raised. This is identical to the unlink() function.
+
+        :raises: OSError on failure
         """
         return self.unlink(path)
 
     def removexattr(self, path, key):
         """
-        Remove a extended attribute of the file.
+        Remove a extended attribute of the path.
 
         :param path: Path to the file or directory.
         :param key: The key of extended attribute.
+        :raises: OSError on failure
         """
         ret = api.glfs_removexattr(self.fs, path, key)
         if ret < 0:
@@ -899,7 +1020,11 @@ class Volume(object):
 
     def rename(self, src, dst):
         """
-        Rename the file or directory from src to dst.
+        Rename the file or directory from src to dst. If dst is a directory,
+        OSError will be raised. If dst exists and is a file, it will be
+        replaced silently if the user has permission.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_rename(self.fs, src, dst)
         if ret < 0:
@@ -911,6 +1036,8 @@ class Volume(object):
         Remove (delete) the directory path. Only works when the directory is
         empty, otherwise, OSError is raised. In order to remove whole
         directory trees, rmtree() can be used.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_rmdir(self.fs, path)
         if ret < 0:
@@ -930,6 +1057,7 @@ class Volume(object):
                         to fail; and exc is the exception that was raised.
                         If ignore_errors is False and onerror is None, an
                         exception is raised
+        :raises: OSError on failure if onerror is None
         """
         if ignore_errors:
             def onerror(*args):
@@ -963,6 +1091,8 @@ class Volume(object):
         setfsuid() changes the value of the caller's filesystem user ID-the
         user ID that the Linux kernel uses to check for all accesses to the
         filesystem.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_setfsuid(uid)
         if ret < 0:
@@ -974,6 +1104,8 @@ class Volume(object):
         setfsgid() changes the value of the caller's filesystem group ID-the
         group ID that the Linux kernel uses to check for all accesses to the
         filesystem.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_setfsgid(gid)
         if ret < 0:
@@ -987,13 +1119,15 @@ class Volume(object):
         :param path: Path to file or directory.
         :param key: The key of extended attribute.
         :param value: The valiue of extended attribute.
-        :param flags: Possible values are 0 (default), 1 and 2
-                      0: xattr will be created if it does not exist, or the
-                         value will be replaced if the xattr exists.
-                      1: Perform a pure create, which fails if the named
-                         attribute already exists.
-                      2: Perform a pure replace operation, which fails if the
-                         named attribute does not already exist.
+        :param flags: Possible values are 0 (default), 1 and 2.
+                      If 0 - xattr will be created if it does not exist, or
+                      the value will be replaced if the xattr exists. If 1 -
+                      it performs a pure create, which fails if the named
+                      attribute already exists. If 2 - it performs a pure
+                      replace operation, which fails if the named attribute
+                      does not already exist.
+
+        :raises: OSError on failure
         """
         ret = api.glfs_setxattr(self.fs, path, key, value, len(value), flags)
         if ret < 0:
@@ -1003,6 +1137,8 @@ class Volume(object):
     def stat(self, path):
         """
         Returns stat information of path.
+
+        :raises: OSError on failure
         """
         s = api.Stat()
         rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
@@ -1015,6 +1151,14 @@ class Volume(object):
         """
         Returns information about a mounted glusterfs volume. path is the
         pathname of any file within the mounted filesystem.
+
+        :returns: An object whose attributes describe the filesystem on the
+                  given path, and correspond to the members of the statvfs
+                  structure, namely: f_bsize, f_frsize, f_blocks, f_bfree,
+                  f_bavail, f_files, f_ffree, f_favail, f_fsid, f_flag,
+                  and f_namemax.
+
+        :raises: OSError on failure
         """
         s = api.Statvfs()
         rc = api.glfs_statvfs(self.fs, path, ctypes.byref(s))
@@ -1026,6 +1170,8 @@ class Volume(object):
     def symlink(self, source, link_name):
         """
         Create a symbolic link 'link_name' which points to 'source'
+
+        :raises: OSError on failure
         """
         ret = api.glfs_symlink(self.fs, source, link_name)
         if ret < 0:
@@ -1036,8 +1182,7 @@ class Volume(object):
         """
         Delete the file 'path'
 
-        :param path: file to be deleted
-        :returns: 0 if success, raises OSError if it fails
+        :raises: OSError on failure
         """
         ret = api.glfs_unlink(self.fs, path)
         if ret < 0:
@@ -1052,6 +1197,10 @@ class Volume(object):
         touch on the path.) Otherwise, times must be a 2-tuple of numbers,
         of the form (atime, mtime) which is used to set the access and
         modified times, respectively.
+
+
+        :raises: OSError on failure to change time.
+                 TypeError if invalid times is passed.
         """
         if times is None:
             now = time.time()
@@ -1084,7 +1233,11 @@ class Volume(object):
         dirpath is the path to the directory, dirnames is a list of the names
         of the subdirectories in dirpath. filenames is a list of the names of
         the non-directiry files in dirpath
+
+        :raises: OSError on failure if onerror is None
         """
+        # TODO: Write a more efficient walk by leveraging d_type information
+        #       returned in readdir.
         try:
             names = self.listdir(top)
         except OSError as err:
