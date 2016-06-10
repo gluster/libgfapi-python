@@ -47,7 +47,7 @@ templates_path = ['_templates']
 # You can specify multiple suffix as a list of string:
 #
 # source_suffix = ['.rst', '.md']
-source_suffix = '.rst'
+source_suffix = ['.rst']
 
 # The encoding of source files.
 #
@@ -129,6 +129,14 @@ todo_include_todos = False
 # a list of builtin themes.
 #
 html_theme = 'alabaster'
+html_theme_options = {
+    'logo': 'ant.png',
+    'github_user': 'gluster',
+    'github_repo': 'libgfapi-python',
+    'github_button': True,
+    'github_type': 'star',
+    'fixed_sidebar': True,
+}
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -142,7 +150,7 @@ html_theme = 'alabaster'
 # The name for this set of Sphinx documents.
 # "<project> v<release> documentation" by default.
 #
-# html_title = u'libgfapi-python v0'
+html_title = u'libgfapi-python'
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #
@@ -183,7 +191,13 @@ html_static_path = ['_static']
 
 # Custom sidebar templates, maps document names to template names.
 #
-# html_sidebars = {}
+html_sidebars = {
+    '**': [
+        'about.html',
+        'navigation.html',
+        'searchbox.html'
+    ]
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.

@@ -4,17 +4,6 @@ libgfapi-python
 This is the official python bindings for `GlusterFS <http://www.gluster.org>`_
 libgfapi C library interface.
 
-Installation
-------------
-
-Install from source:
-
-.. code-block:: console
-
-   $ git clone https://review.gluster.org/libgfapi-python
-   $ cd libgfapi-python
-   $ sudo python setup.py install
-
 Example Usage
 -------------
 
@@ -46,11 +35,8 @@ Example Usage
     # Unmount the volume
     volume.umount()
 
-
-API Reference
--------------
-
 .. toctree::
-   :maxdepth: 2
+    :hidden:
+    :glob:
 
-   api-reference
+    *
