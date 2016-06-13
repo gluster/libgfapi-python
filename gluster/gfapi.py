@@ -14,6 +14,8 @@ import math
 import time
 import stat
 import errno
+from collections import Iterator
+
 from gluster import api
 from gluster.exceptions import LibgfapiException, Error
 from gluster.utils import validate_mount, validate_glfd
@@ -471,13 +473,14 @@ class File(object):
             raise OSError(err, os.strerror(err))
 
 
-class Dir(object):
+class Dir(Iterator):
 
-    def __init__(self, fd):
+    def __init__(self, fd, readdirplus=False):
         # Add a reference so the module-level variable "api" doesn't
         # get yanked out from under us (see comment above File def'n).
         self._api = api
         self.fd = fd
+        self.readdirplus = readdirplus
         self.cursor = ctypes.POINTER(api.Dirent)()
 
     def __del__(self):
@@ -487,13 +490,136 @@ class Dir(object):
     def next(self):
         entry = api.Dirent()
         entry.d_reclen = 256
-        rc = api.glfs_readdir_r(self.fd, ctypes.byref(entry),
-                                ctypes.byref(self.cursor))
 
-        if (rc < 0) or (not self.cursor) or (not self.cursor.contents):
-            return rc
+        if self.readdirplus:
+            stat_info = api.Stat()
+            ret = api.glfs_readdirplus_r(self.fd, ctypes.byref(stat_info),
+                                         ctypes.byref(entry),
+                                         ctypes.byref(self.cursor))
+        else:
+            ret = api.glfs_readdir_r(self.fd, ctypes.byref(entry),
+                                     ctypes.byref(self.cursor))
 
-        return entry
+        if ret != 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+
+        if (not self.cursor) or (not self.cursor.contents):
+            # Reached end of directory stream
+            raise StopIteration
+
+        if self.readdirplus:
+            return (entry, stat_info)
+        else:
+            return entry
+
+
+class DirEntry(object):
+    """
+    Object yielded by scandir() to expose the file path and other file
+    attributes of a directory entry. scandir() will provide stat information
+    without making additional calls. DirEntry instances are not intended to be
+    stored in long-lived data structures; if you know the file metadata has
+    changed or if a long time has elapsed since calling scandir(), call
+    Volume.stat(entry.path) to fetch up-to-date information.
+
+    DirEntry() instances from Python 3.5 have follow_symlinks set to True by
+    default. In this implementation, follow_symlinks is set to False by
+    default as it incurs an additional stat call over network.
+    """
+
+    __slots__ = ('_name', '_vol', '_lstat', '_stat', '_path')
+
+    def __init__(self, vol, scandir_path, name, lstat):
+        self._name = name
+        self._vol = vol
+        self._lstat = lstat
+        self._stat = None
+        self._path = os.path.join(scandir_path, name)
+
+    @property
+    def name(self):
+        """
+        The entry's base filename, relative to the scandir() path argument.
+        """
+        return self._name
+
+    @property
+    def path(self):
+        """
+        The entry's full path name: equivalent to os.path.join(scandir_path,
+        entry.name) where scandir_path is the scandir() path argument. The path
+        is only absolute if the scandir() path argument was absolute.
+        """
+        return self._path
+
+    def stat(self, follow_symlinks=False):
+        """
+        Returns information equivalent of a lstat() system call on the entry.
+        This does not follow symlinks.
+        """
+        if follow_symlinks:
+            if self._stat is None:
+                if self.is_symlink():
+                    self._stat = self._vol.stat(self.path)
+                else:
+                    self._stat = self._lstat
+            return self._stat
+        else:
+            return self._lstat
+
+    def is_dir(self, follow_symlinks=False):
+        """
+        Return True if this entry is a directory; return False if the entry is
+        any other kind of file, or if it doesn't exist anymore.
+        """
+        if follow_symlinks and self.is_symlink():
+            try:
+                st = self.stat(follow_symlinks=follow_symlinks)
+            except OSError as err:
+                if err.errno != errno.ENOENT:
+                    raise
+                return False
+            else:
+                return stat.S_ISDIR(st.st_mode)
+        else:
+            return stat.S_ISDIR(self._lstat.st_mode)
+
+    def is_file(self, follow_symlinks=False):
+        """
+        Return True if this entry is a file; return False if the entry is a
+        directory or other non-file entry, or if it doesn't exist anymore.
+        """
+        if follow_symlinks and self.is_symlink():
+            try:
+                st = self.stat(follow_symlinks=follow_symlinks)
+            except OSError as err:
+                if err.errno != errno.ENOENT:
+                    raise
+                return False
+            else:
+                return stat.S_ISREG(st.st_mode)
+        else:
+            return stat.S_ISREG(self._lstat.st_mode)
+
+    def is_symlink(self):
+        """
+        Return True if this entry is a symbolic link (even if broken); return
+        False if the entry points to a directory or any kind of file, or if it
+        doesn't exist anymore.
+        """
+        return stat.S_ISLNK(self._lstat.st_mode)
+
+    def inode(self):
+        """
+        Return the inode number of the entry.
+        """
+        return self._lstat.st_ino
+
+    def __str__(self):
+        return '<{0}: {1!r}>'.format(self.__class__.__name__, self.name)
+
+    __repr__ = __str__
 
 
 class Volume(object):
@@ -822,17 +948,68 @@ class Volume(object):
         given by path. The list is in arbitrary order. It does not include
         the special entries '.' and '..' even if they are present in the
         directory.
+
+        :param path: Path to directory
+        :raises: OSError on failure
+        :returns: List of names of directory entries
         """
         dir_list = []
-        d = self.opendir(path)
-        while True:
-            ent = d.next()
-            if not isinstance(ent, api.Dirent):
+        for entry in self.opendir(path):
+            if not isinstance(entry, api.Dirent):
                 break
-            name = ent.d_name[:ent.d_reclen]
+            name = entry.d_name[:entry.d_reclen]
             if name not in (".", ".."):
                 dir_list.append(name)
         return dir_list
+
+    def listdir_with_stat(self, path):
+        """
+        Return a list containing the name and stat of the entries in the
+        directory given by path. The list is in arbitrary order. It does
+        not include the special entries '.' and '..' even if they are present
+        in the directory.
+
+        :param path: Path to directory
+        :raises: OSError on failure
+        :returns: A list of tuple. The tuple is of the form (name, stat) where
+                  name is a string indicating name of the directory entry and
+                  stat contains stat info of the entry.
+        """
+        # List of tuple. Each tuple is of the form (name, stat)
+        entries_with_stat = []
+        for (entry, stat_info) in self.opendir(path, readdirplus=True):
+            if not (isinstance(entry, api.Dirent) and
+                    isinstance(stat_info, api.Stat)):
+                break
+            name = entry.d_name[:entry.d_reclen]
+            if name not in (".", ".."):
+                entries_with_stat.append((name, stat_info))
+        return entries_with_stat
+
+    def scandir(self, path):
+        """
+        Return an iterator of :class:`DirEntry` objects corresponding to the
+        entries in the directory given by path. The entries are yielded in
+        arbitrary order, and the special entries '.' and '..' are not
+        included.
+
+        Using scandir() instead of listdir() can significantly increase the
+        performance of code that also needs file type or file attribute
+        information, because :class:`DirEntry` objects expose this
+        information.
+
+        scandir() provides same functionality as listdir_with_stat() except
+        that scandir() does not return a list and is an iterator. Hence scandir
+        is less memory intensive on large directories.
+
+        :param path: Path to directory
+        :raises: OSError on failure
+        :yields: Instance of :class:`DirEntry` class.
+        """
+        for (entry, lstat) in self.opendir(path, readdirplus=True):
+            name = entry.d_name[:entry.d_reclen]
+            if name not in (".", ".."):
+                yield DirEntry(self, path, name, lstat)
 
     @validate_mount
     def listxattr(self, path, size=0):
@@ -1000,11 +1177,13 @@ class Volume(object):
         return fd
 
     @validate_mount
-    def opendir(self, path):
+    def opendir(self, path, readdirplus=False):
         """
         Open a directory.
 
         :param path: Path to the directory
+        :param readdirplus: Enable readdirplus which will also fetch stat
+                            information for each entry of directory.
         :returns: Returns a instance of Dir class
         :raises: OSError on failure
         """
@@ -1012,7 +1191,7 @@ class Volume(object):
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return Dir(fd)
+        return Dir(fd, readdirplus)
 
     @validate_mount
     def readlink(self, path):

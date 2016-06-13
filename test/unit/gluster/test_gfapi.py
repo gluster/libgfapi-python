@@ -17,7 +17,7 @@ import time
 import math
 import errno
 
-from gluster.gfapi import File, Dir, Volume
+from gluster.gfapi import File, Dir, Volume, DirEntry
 from gluster import api
 from gluster.exceptions import LibgfapiException
 from nose import SkipTest
@@ -622,7 +622,7 @@ class TestVolume(unittest.TestCase):
         dirent3.d_name = "."
         dirent3.d_reclen = 1
         mock_Dir_next = Mock()
-        mock_Dir_next.side_effect = [dirent1, dirent2, dirent3, None]
+        mock_Dir_next.side_effect = [dirent1, dirent2, dirent3, StopIteration]
 
         with nested(patch("gluster.gfapi.api.glfs_opendir",
                           mock_glfs_opendir),
@@ -637,6 +637,96 @@ class TestVolume(unittest.TestCase):
 
         with patch("gluster.gfapi.api.glfs_opendir", mock_glfs_opendir):
             self.assertRaises(OSError, self.vol.listdir, "test.txt")
+
+    def test_listdir_with_stat_success(self):
+        mock_glfs_opendir = Mock()
+        mock_glfs_opendir.return_value = 2
+
+        dirent1 = api.Dirent()
+        dirent1.d_name = "mockfile"
+        dirent1.d_reclen = 8
+        stat1 = api.Stat()
+        stat1.st_nlink = 1
+        dirent2 = api.Dirent()
+        dirent2.d_name = "mockdir"
+        dirent2.d_reclen = 7
+        stat2 = api.Stat()
+        stat2.st_nlink = 2
+        dirent3 = api.Dirent()
+        dirent3.d_name = "."
+        dirent3.d_reclen = 1
+        stat3 = api.Stat()
+        stat3.n_link = 2
+        mock_Dir_next = Mock()
+        mock_Dir_next.side_effect = [(dirent1, stat1),
+                                     (dirent2, stat2),
+                                     (dirent3, stat3),
+                                     StopIteration]
+
+        with nested(patch("gluster.gfapi.api.glfs_opendir",
+                          mock_glfs_opendir),
+                    patch("gluster.gfapi.Dir.next", mock_Dir_next)):
+            d = self.vol.listdir_with_stat("testdir")
+            self.assertEqual(len(d), 2)
+            self.assertEqual(d[0][0], 'mockfile')
+            self.assertEqual(d[0][1].st_nlink, 1)
+            self.assertEqual(d[1][0], 'mockdir')
+            self.assertEqual(d[1][1].st_nlink, 2)
+
+    def test_listdir_with_stat_fail_exception(self):
+        mock_glfs_opendir = Mock()
+        mock_glfs_opendir.return_value = None
+        with patch("gluster.gfapi.api.glfs_opendir", mock_glfs_opendir):
+            self.assertRaises(OSError, self.vol.listdir_with_stat, "dir")
+
+    def test_scandir_success(self):
+        mock_glfs_opendir = Mock()
+        mock_glfs_opendir.return_value = 2
+
+        dirent1 = api.Dirent()
+        dirent1.d_name = "mockfile"
+        dirent1.d_reclen = 8
+        stat1 = api.Stat()
+        stat1.st_nlink = 1
+        stat1.st_mode = 33188
+        dirent2 = api.Dirent()
+        dirent2.d_name = "mockdir"
+        dirent2.d_reclen = 7
+        stat2 = api.Stat()
+        stat2.st_nlink = 2
+        stat2.st_mode = 16877
+        dirent3 = api.Dirent()
+        dirent3.d_name = "."
+        dirent3.d_reclen = 1
+        stat3 = api.Stat()
+        stat3.n_link = 2
+        stat3.st_mode = 16877
+        mock_Dir_next = Mock()
+        mock_Dir_next.side_effect = [(dirent1, stat1),
+                                     (dirent2, stat2),
+                                     (dirent3, stat3),
+                                     StopIteration]
+
+        with nested(patch("gluster.gfapi.api.glfs_opendir",
+                          mock_glfs_opendir),
+                    patch("gluster.gfapi.Dir.next", mock_Dir_next)):
+            i = 0
+            for entry in self.vol.scandir("testdir"):
+                self.assertTrue(isinstance(entry, DirEntry))
+                if entry.name == 'mockfile':
+                    self.assertEqual(entry.path, 'testdir/mockfile')
+                    self.assertTrue(entry.is_file())
+                    self.assertFalse(entry.is_dir())
+                    self.assertEqual(entry.stat().st_nlink, 1)
+                elif entry.name == 'mockdir':
+                    self.assertEqual(entry.path, 'testdir/mockdir')
+                    self.assertTrue(entry.is_dir())
+                    self.assertFalse(entry.is_file())
+                    self.assertEqual(entry.stat().st_nlink, 2)
+                else:
+                    self.fail("Unexpected entry")
+                i = i + 1
+            self.assertEqual(i, 2)
 
     def test_listxattr_success(self):
         def mock_glfs_listxattr(fs, path, buf, buflen):

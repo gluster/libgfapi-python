@@ -419,6 +419,12 @@ glfs_readdir_r = gfapi_prototype('glfs_readdir_r', ctypes.c_int,
                                  ctypes.POINTER(Dirent),
                                  ctypes.POINTER(ctypes.POINTER(Dirent)))
 
+glfs_readdirplus_r = gfapi_prototype('glfs_readdirplus_r', ctypes.c_int,
+                                     ctypes.c_void_p,
+                                     ctypes.POINTER(Stat),
+                                     ctypes.POINTER(Dirent),
+                                     ctypes.POINTER(ctypes.POINTER(Dirent)))
+
 glfs_closedir = gfapi_prototype('glfs_closedir', ctypes.c_int,
                                 ctypes.c_void_p)
 
