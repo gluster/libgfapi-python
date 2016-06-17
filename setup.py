@@ -1,18 +1,14 @@
 #!/usr/bin/python
-# Copyright (c) 2013 Red Hat, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Copyright (c) 2016 Red Hat, Inc.
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+# This file is part of libgfapi-python project which is a
+# subproject of GlusterFS ( www.gluster.org)
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# This file is licensed to you under your choice of the GNU Lesser
+# General Public License, version 3 or any later version (LGPLv3 or
+# later), or the GNU General Public License, version 2 (GPLv2), in all
+# cases as published by the Free Software Foundation.
 
 from setuptools import setup
 
@@ -26,16 +22,17 @@ setup(
     name=name,
     version=version,
     description='Python bindings for GlusterFS libgfapi',
-    license='Apache License (2.0)',
+    license='GPLv2 or LGPLv3+',
     author='Red Hat, Inc.',
-    author_email='gluster-users@gluster.org',
+    author_email='gluster-devel@gluster.org',
     url='http://www.gluster.org',
     packages=['gluster', ],
     test_suite='nose.collector',
     classifiers=[
         'Development Status :: 5 - Production/Stable'
         'Intended Audience :: Developers'
-        'License :: OSI Approved :: Apache Software License'
+        'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)'
+        'License :: OSI Approved :: GNU General Public License v2 (GPLv2)'
         'Operating System :: POSIX :: Linux'
         'Programming Language :: Python'
         'Programming Language :: Python :: 2'
