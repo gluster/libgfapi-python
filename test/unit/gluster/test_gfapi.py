@@ -21,7 +21,7 @@ from gluster.gfapi import File, Dir, Volume, DirEntry
 from gluster import api
 from gluster.exceptions import LibgfapiException
 from nose import SkipTest
-from mock import Mock, patch
+from mock import Mock, MagicMock, patch
 from contextlib import nested
 
 
@@ -961,41 +961,34 @@ class TestVolume(unittest.TestCase):
                               "key1")
 
     def test_rmtree_success(self):
-        dir1_list = ["dir2", "file"]
-        empty_list = []
-        mock_listdir = Mock()
-        mock_listdir.side_effect = [dir1_list, empty_list]
-
-        mock_isdir = Mock()
-        mock_isdir.side_effect = [True, False]
+        s_file = api.Stat()
+        s_file.st_mode = stat.S_IFREG
+        d = DirEntry(None, 'dirpath', 'file1', s_file)
+        mock_scandir = MagicMock()
+        mock_scandir.return_value = [d]
 
         mock_unlink = Mock()
-        mock_unlink.return_value = 0
-
         mock_rmdir = Mock()
-        mock_rmdir.return_value = 0
+        mock_islink = Mock(return_value=False)
 
-        mock_islink = Mock()
-        mock_islink.return_value = False
-
-        with nested(patch("gluster.gfapi.Volume.listdir", mock_listdir),
-                    patch("gluster.gfapi.Volume.isdir", mock_isdir),
+        with nested(patch("gluster.gfapi.Volume.scandir", mock_scandir),
                     patch("gluster.gfapi.Volume.islink", mock_islink),
                     patch("gluster.gfapi.Volume.unlink", mock_unlink),
                     patch("gluster.gfapi.Volume.rmdir", mock_rmdir)):
-            self.vol.rmtree("dir1")
-            mock_rmdir.assert_any_call("dir1/dir2")
-            mock_unlink.assert_called_once_with("dir1/file")
-            mock_rmdir.assert_called_with("dir1")
+            self.vol.rmtree("dirpath")
+
+        mock_islink.assert_called_once_with("dirpath")
+        mock_unlink.assert_called_once_with("dirpath/file1")
+        mock_rmdir.assert_called_once_with("dirpath")
 
     def test_rmtree_listdir_exception(self):
-        mock_listdir = Mock()
-        mock_listdir.side_effect = [OSError]
+        mock_scandir = MagicMock()
+        mock_scandir.side_effect = [OSError]
 
         mock_islink = Mock()
         mock_islink.return_value = False
 
-        with nested(patch("gluster.gfapi.Volume.listdir", mock_listdir),
+        with nested(patch("gluster.gfapi.Volume.scandir", mock_scandir),
                     patch("gluster.gfapi.Volume.islink", mock_islink)):
             self.assertRaises(OSError, self.vol.rmtree, "dir1")
 
@@ -1007,32 +1000,25 @@ class TestVolume(unittest.TestCase):
             self.assertRaises(OSError, self.vol.rmtree, "dir1")
 
     def test_rmtree_ignore_unlink_rmdir_exception(self):
-        dir1_list = ["dir2", "file"]
-        empty_list = []
-        mock_listdir = Mock()
-        mock_listdir.side_effect = [dir1_list, empty_list]
+        s_file = api.Stat()
+        s_file.st_mode = stat.S_IFREG
+        d = DirEntry(None, 'dirpath', 'file1', s_file)
+        mock_scandir = MagicMock()
+        mock_scandir.return_value = [d]
 
-        mock_isdir = Mock()
-        mock_isdir.side_effect = [True, False]
+        mock_unlink = Mock(side_effect=OSError)
+        mock_rmdir = Mock(side_effect=OSError)
+        mock_islink = Mock(return_value=False)
 
-        mock_unlink = Mock()
-        mock_unlink.side_effect = [OSError]
-
-        mock_rmdir = Mock()
-        mock_rmdir.side_effect = [0, OSError]
-
-        mock_islink = Mock()
-        mock_islink.return_value = False
-
-        with nested(patch("gluster.gfapi.Volume.listdir", mock_listdir),
-                    patch("gluster.gfapi.Volume.isdir", mock_isdir),
+        with nested(patch("gluster.gfapi.Volume.scandir", mock_scandir),
                     patch("gluster.gfapi.Volume.islink", mock_islink),
                     patch("gluster.gfapi.Volume.unlink", mock_unlink),
                     patch("gluster.gfapi.Volume.rmdir", mock_rmdir)):
-            self.vol.rmtree("dir1", True)
-            mock_rmdir.assert_any_call("dir1/dir2")
-            mock_unlink.assert_called_once_with("dir1/file")
-            mock_rmdir.assert_called_with("dir1")
+            self.vol.rmtree("dirpath", True)
+
+        mock_islink.assert_called_once_with("dirpath")
+        mock_unlink.assert_called_once_with("dirpath/file1")
+        mock_rmdir.assert_called_once_with("dirpath")
 
     def test_setfsuid_success(self):
         mock_glfs_setfsuid = Mock()
@@ -1093,32 +1079,81 @@ class TestVolume(unittest.TestCase):
                               "filelink")
 
     def test_walk_success(self):
-        dir1_list = ["dir2", "file"]
-        empty_list = []
-        mock_listdir = Mock()
-        mock_listdir.side_effect = [dir1_list, empty_list]
+        s_dir = api.Stat()
+        s_dir.st_mode = stat.S_IFDIR
+        d1 = DirEntry(Mock(), 'dirpath', 'dir1', s_dir)
+        d2 = DirEntry(Mock(), 'dirpath', 'dir2', s_dir)
+        s_file = api.Stat()
+        s_file.st_mode = stat.S_IFREG
+        d3 = DirEntry(Mock(), 'dirpath', 'file1', s_file)
+        d4 = DirEntry(Mock(), 'dirpath', 'file2', s_file)
+        mock_scandir = MagicMock()
+        mock_scandir.return_value = [d1, d3, d2, d4]
 
-        mock_isdir = Mock()
-        mock_isdir.side_effect = [True, False]
-
-        with nested(patch("gluster.gfapi.Volume.listdir", mock_listdir),
-                    patch("gluster.gfapi.Volume.isdir", mock_isdir)):
-            for (path, dirs, files) in self.vol.walk("dir1"):
-                self.assertEqual(dirs, ['dir2'])
-                self.assertEqual(files, ['file'])
+        with patch("gluster.gfapi.Volume.scandir", mock_scandir):
+            for (path, dirs, files) in self.vol.walk("dirpath"):
+                self.assertEqual(dirs, ['dir1', 'dir2'])
+                self.assertEqual(files, ['file1', 'file2'])
                 break
 
-    def test_walk_listdir_exception(self):
-        mock_listdir = Mock()
-        mock_listdir.side_effect = [OSError]
+    def test_walk_scandir_exception(self):
+        mock_scandir = Mock()
+        mock_scandir.side_effect = [OSError]
 
         def mock_onerror(err):
             self.assertTrue(isinstance(err, OSError))
 
-        with patch("gluster.gfapi.Volume.listdir", mock_listdir):
+        with patch("gluster.gfapi.Volume.scandir", mock_scandir):
             for (path, dirs, files) in self.vol.walk("dir1",
                                                      onerror=mock_onerror):
                 pass
+
+    def test_copytree_success(self):
+        d_stat = api.Stat()
+        d_stat.st_mode = stat.S_IFDIR
+        f_stat = api.Stat()
+        f_stat.st_mode = stat.S_IFREG
+        # Depth = 0
+        iter1 = [('dir1', d_stat), ('dir2', d_stat), ('file1', f_stat)]
+        # Depth = 1, dir1
+        iter2 = [('file2', f_stat), ('file3', f_stat)]
+        # Depth = 1, dir2
+        iter3 = [('file4', f_stat), ('dir3', d_stat), ('file5', f_stat)]
+        # Depth = 2, dir3
+        iter4 = []  # Empty directory.
+        # So there are 5 files in total that should to be copied
+        # and (3 + 1) directories should be created, including the destination
+
+        m_list_s = Mock(side_effect=[iter1, iter2, iter3, iter4])
+        m_makedirs = Mock()
+        m_fopen = MagicMock()
+        m_copyfileobj = Mock()
+        m_utime = Mock()
+        m_chmod = Mock()
+        m_copystat = Mock()
+        with nested(patch("gluster.gfapi.Volume.listdir_with_stat", m_list_s),
+                    patch("gluster.gfapi.Volume.makedirs", m_makedirs),
+                    patch("gluster.gfapi.Volume.fopen", m_fopen),
+                    patch("gluster.gfapi.Volume.copyfileobj", m_copyfileobj),
+                    patch("gluster.gfapi.Volume.utime", m_utime),
+                    patch("gluster.gfapi.Volume.chmod", m_chmod),
+                    patch("gluster.gfapi.Volume.copystat", m_copystat)):
+            self.vol.copytree('/source', '/destination')
+
+        # Assert that listdir_with_stat() was called on all directories
+        self.assertEqual(m_list_s.call_count, 3 + 1)
+        # Assert that fopen() was called 10 times - twice for each file
+        # i.e once for reading and another time for writing.
+        self.assertEqual(m_fopen.call_count, 10)
+        # Assert number of files copied
+        self.assertEqual(m_copyfileobj.call_count, 5)
+        # Assert that utime and chmod was called on the files
+        self.assertEqual(m_utime.call_count, 5)
+        self.assertEqual(m_chmod.call_count, 5)
+        # Assert number of directories created
+        self.assertEqual(m_makedirs.call_count, 3 + 1)
+        # Assert that copystat() was called on source and destination dir
+        m_copystat.called_once_with('/source', '/destination')
 
     def test_utime(self):
         # Test times arg being invalid.

@@ -47,10 +47,9 @@ class BinFileOpsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vol = Volume(HOST, VOLNAME)
-        ret = cls.vol.mount()
-        if ret == 0:
-            # Cleanup volume
-            cls.vol.rmtree("/", ignore_errors=True)
+        cls.vol.mount()
+        # Cleanup volume
+        cls.vol.rmtree("/", ignore_errors=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -81,10 +80,9 @@ class FileOpsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vol = Volume(HOST, VOLNAME)
-        ret = cls.vol.mount()
-        if ret == 0:
-            # Cleanup volume
-            cls.vol.rmtree("/", ignore_errors=True)
+        cls.vol.mount()
+        # Cleanup volume
+        cls.vol.rmtree("/", ignore_errors=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -801,60 +799,96 @@ class DirOpsTest(unittest.TestCase):
 
     data = None
     dir_path = None
-    testfile = None
 
     @classmethod
     def setUpClass(cls):
         cls.vol = Volume(HOST, VOLNAME)
-        ret = cls.vol.mount()
-        if ret == 0:
-            # Cleanup volume
-            cls.vol.rmtree("/", ignore_errors=True)
-        cls.testfile = "testfile"
+        cls.vol.mount()
+        # Cleanup volume
+        cls.vol.rmtree("/", ignore_errors=True)
 
     @classmethod
     def tearDownClass(cls):
         cls.vol.rmtree("/", ignore_errors=True)
         cls.vol = None
-        cls.testfile = None
 
     def setUp(self):
+        # Create a filesystem tree
         self.data = "gluster is awesome"
         self.dir_path = self._testMethodName + "_dir"
         self.vol.mkdir(self.dir_path, 0755)
         for x in range(0, 3):
-            f = os.path.join(self.dir_path, self.testfile + str(x))
-            with File(self.vol.open(f, os.O_CREAT | os.O_WRONLY | os.O_EXCL,
-                      0644)) as f:
-                rc = f.write(self.data)
-                self.assertEqual(rc, len(self.data))
-                f.fdatasync()
+            d = os.path.join(self.dir_path, 'testdir' + str(x))
+            self.vol.mkdir(d)
+            # Create files inside two of the three directories
+            if x != 1:
+                for i in range(0, 2):
+                    f = os.path.join(d, 'nestedfile' + str(i))
+                    with self.vol.fopen(f, 'w') as f:
+                        rc = f.write(self.data)
+                        self.assertEqual(rc, len(self.data))
+            # Create single file in root of directory
+            if x == 2:
+                file_path = os.path.join(self.dir_path, "testfile")
+                with self.vol.fopen(file_path, 'w') as f:
+                    rc = f.write(self.data)
+                    self.assertEqual(rc, len(self.data))
+
+        # Create symlinks - one pointing to a file and another to a dir
+        # Beware: rmtree() cannot remove these symlinks
+        self.vol.symlink("testfile",
+                         os.path.join(self.dir_path, 'test_symlink_file'))
+        self.vol.symlink("testdir2",
+                         os.path.join(self.dir_path, 'test_symlink_dir'))
+
+        # The dir tree set up for testing now looks like this:
+        # test_name_here
+        #    |-- testdir0
+        #    |     |-- nestedfile0
+        #    |     |-- nestedfile1
+        #    |-- testdir1
+        #    |-- testdir2
+        #    |     |-- nestedfile0
+        #    |     |-- nestedfile1
+        #    |-- testfile
+        #    |-- testsymlink_file --> testfile
+        #    |-- testsymlink_dir --> testdir2
 
     def tearDown(self):
+        self._symlinks_cleanup()
         self.dir_path = None
         self.data = None
 
     def test_isdir(self):
-        isdir = self.vol.isdir(self.dir_path)
-        self.assertTrue(isdir)
-
-    def test_isfile_false(self):
-        isfile = self.vol.isfile(self.dir_path)
-        self.assertFalse(isfile)
+        self.assertTrue(self.vol.isdir(self.dir_path))
+        self.assertFalse(self.vol.isfile(self.dir_path))
 
     def test_listdir(self):
         dir_list = self.vol.listdir(self.dir_path)
         dir_list.sort()
-        self.assertEqual(dir_list, ["testfile0", "testfile1", "testfile2"])
+        self.assertEqual(dir_list,
+                         ["test_symlink_dir", "test_symlink_file",
+                          "testdir0", "testdir1", "testdir2", "testfile"])
 
     def test_listdir_with_stat(self):
         dir_list = self.vol.listdir_with_stat(self.dir_path)
         dir_list_sorted = sorted(dir_list, key=lambda tup: tup[0])
+        dir_count = 0
+        file_count = 0
+        symlink_count = 0
         for index, (name, stat_info) in enumerate(dir_list_sorted):
-            self.assertEqual(name, 'testfile%s' % (index))
             self.assertTrue(isinstance(stat_info, Stat))
-            self.assertTrue(stat.S_ISREG(stat_info.st_mode))
-            self.assertEqual(stat_info.st_size, len(self.data))
+            if stat.S_ISREG(stat_info.st_mode):
+                self.assertEqual(stat_info.st_size, len(self.data))
+                file_count += 1
+            elif stat.S_ISDIR(stat_info.st_mode):
+                self.assertEqual(stat_info.st_size, 4096)
+                dir_count += 1
+            elif stat.S_ISLNK(stat_info.st_mode):
+                symlink_count += 1
+        self.assertEqual(dir_count, 3)
+        self.assertEqual(file_count, 1)
+        self.assertEqual(symlink_count, 2)
 
         # Error - path does not exist
         self.assertRaises(OSError,
@@ -866,13 +900,25 @@ class DirOpsTest(unittest.TestCase):
             self.assertTrue(isinstance(entry, DirEntry))
             entries.append(entry)
 
+        dir_count = 0
+        file_count = 0
+        symlink_count = 0
         entries_sorted = sorted(entries, key=lambda e: e.name)
         for index, entry in enumerate(entries_sorted):
-            self.assertEqual(entry.name, 'testfile%s' % (index))
-            self.assertTrue(entry.is_file())
-            self.assertFalse(entry.is_dir())
             self.assertTrue(isinstance(entry.stat(), Stat))
-            self.assertEqual(entry.stat().st_size, len(self.data))
+            if entry.is_file():
+                self.assertEqual(entry.stat().st_size, len(self.data))
+                self.assertFalse(entry.is_dir())
+                file_count += 1
+            elif entry.is_dir():
+                self.assertEqual(entry.stat().st_size, 4096)
+                self.assertFalse(entry.is_file())
+                dir_count += 1
+            elif entry.is_symlink():
+                symlink_count += 1
+        self.assertEqual(dir_count, 3)
+        self.assertEqual(file_count, 1)
+        self.assertEqual(symlink_count, 2)
 
     def test_makedirs(self):
         name = self.dir_path + "/subd1/subd2/subd3"
@@ -893,10 +939,151 @@ class DirOpsTest(unittest.TestCase):
         """
         by testing rmtree, we are also testing unlink and rmdir
         """
-        f = os.path.join(self.dir_path, self.testfile + "1")
-        self.vol.rmtree(self.dir_path, True)
+        f = os.path.join(self.dir_path, "testdir0", "nestedfile0")
+        self.vol.exists(f)
+        d = os.path.join(self.dir_path, "testdir0")
+        self.vol.rmtree(d, True)
         self.assertRaises(OSError, self.vol.lstat, f)
-        self.assertRaises(OSError, self.vol.lstat, self.dir_path)
+        self.assertRaises(OSError, self.vol.lstat, d)
+
+    def test_walk_default(self):
+        # Default: topdown=True, followlinks=False
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(self.dir_path):
+            for name in files:
+                file_list.append(name)
+            for name in dirs:
+                dir_list.append(name)
+        self.assertEqual(len(dir_list), 3)  # 3 regular directories
+        self.assertEqual(len(file_list), 7)  # 5 regular files + 2 symlinks
+
+    def test_walk_topdown_and_followinks(self):
+        # topdown=True, followlinks=True
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(self.dir_path,
+                                               followlinks=True):
+            for name in files:
+                file_list.append(name)
+            for name in dirs:
+                dir_list.append(name)
+        # 4 = 3 regular directories +
+        #     1 symlink which is pointing to a directory
+        self.assertEqual(len(dir_list), 4)
+        # 8 = 5 regular files +
+        #     1 symlink that points to a file +
+        #     2 regular files listed again as they are in a directory which has
+        #       a symlink pointing to it. This results in that directory being
+        #       visited twice.
+        self.assertEqual(len(file_list), 8)
+
+    def test_walk_no_topdown_no_followlinks(self):
+        # topdown=False, followlinks=False
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(self.dir_path, topdown=False):
+            for name in files:
+                file_list.append(name)
+            for name in dirs:
+                dir_list.append(name)
+        self.assertEqual(len(dir_list), 3)  # 3 regular directories
+        self.assertEqual(len(file_list), 7)  # 5 regular files + 2 symlinks
+
+    def test_walk_no_topdown_and_followlinks(self):
+        # topdown=False, followlinks=True
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(self.dir_path, topdown=False,
+                                               followlinks=True):
+            for name in files:
+                file_list.append(name)
+            for name in dirs:
+                dir_list.append(name)
+        # 4 = 3 regular directories +
+        #     1 symlink which is pointing to a directory
+        self.assertEqual(len(dir_list), 4)
+        # 8 = 5 regular files +
+        #     1 symlink that points to a file +
+        #     2 regular files listed again as they are in a directory which has
+        #       a symlink pointing to it. This results in that directory being
+        #       visited twice.
+        self.assertEqual(len(file_list), 8)
+
+    def test_walk_error(self):
+        # Test onerror handling
+        #
+        # onerror not set
+        try:
+            for root, dirs, files in self.vol.walk("non-existent-path"):
+                pass
+        except OSError:
+            self.fail("No exception should be raised")
+
+        # onerror method is set
+        def handle_error(err):
+            raise err
+        try:
+            for root, dirs, files in self.vol.walk("non-existent-path",
+                                                   onerror=handle_error):
+                pass
+        except OSError:
+            pass
+        else:
+            self.fail("Expecting OSError exception")
+
+    def _symlinks_cleanup(self):
+        # rmtree() cannot remove these symlinks, hence removing manually.
+        symlinks = ('test_symlink_dir', 'test_symlink_file')
+        for name in symlinks:
+            try:
+                self.vol.unlink(os.path.join(self.dir_path, name))
+            except OSError as err:
+                if err.errno != errno.ENOENT:
+                    raise
+
+    def test_copy_tree(self):
+        dest_path = self.dir_path + '_dest'
+
+        # symlinks = False (contents pointed by symlinks are copied)
+        self.vol.copytree(self.dir_path, dest_path, symlinks=False)
+
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(dest_path):
+            for name in files:
+                fullpath = os.path.join(root, name)
+                s = self.vol.lstat(fullpath)
+                # Assert that there are no symlinks
+                self.assertFalse(stat.S_ISLNK(s.st_mode))
+                file_list.append(name)
+            for name in dirs:
+                fullpath = os.path.join(root, name)
+                s = self.vol.lstat(fullpath)
+                # Assert that there are no symlinks
+                self.assertFalse(stat.S_ISLNK(s.st_mode))
+                dir_list.append(name)
+        self.assertEqual(len(dir_list), 4)  # 4 regular directories
+        self.assertEqual(len(file_list), 8)  # 8 regular files
+
+        # Cleanup
+        self.vol.rmtree(dest_path)
+
+        # symlinks = True (symlinks itself is copied as is)
+        self.vol.copytree(self.dir_path, dest_path, symlinks=True)
+
+        file_list = []
+        dir_list = []
+        for root, dirs, files in self.vol.walk(dest_path):
+            for name in files:
+                file_list.append(name)
+            for name in dirs:
+                dir_list.append(name)
+        self.assertEqual(len(dir_list), 3)  # 3 regular directories
+        self.assertEqual(len(file_list), 7)  # 5 regular files + 2 symlinks
+
+        # Error - The destination directory must not exist
+        self.assertRaises(OSError, self.vol.copytree, self.dir_path, dest_path)
 
 
 class TestVolumeInit(unittest.TestCase):

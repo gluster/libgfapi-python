@@ -556,7 +556,7 @@ class DirEntry(object):
     def stat(self, follow_symlinks=False):
         """
         Returns information equivalent of a lstat() system call on the entry.
-        This does not follow symlinks.
+        This does not follow symlinks by default.
         """
         if follow_symlinks:
             if self._stat is None:
@@ -1285,20 +1285,23 @@ class Volume(object):
                 raise
         if self.islink(path):
             raise OSError("Cannot call rmtree on a symbolic link")
-        names = []
+
         try:
-            names = self.listdir(path)
+            for entry in self.scandir(path):
+                fullname = os.path.join(path, entry.name)
+                if entry.is_dir(follow_symlinks=False):
+                    self.rmtree(fullname, ignore_errors, onerror)
+                else:
+                    try:
+                        self.unlink(fullname)
+                    except OSError as e:
+                        onerror(self.unlink, fullname, e)
         except OSError as e:
-            onerror(self.listdir, path, e)
-        for name in names:
-            fullname = os.path.join(path, name)
-            if self.isdir(fullname):
-                self.rmtree(fullname, ignore_errors, onerror)
-            else:
-                try:
-                    self.unlink(fullname)
-                except OSError as e:
-                    onerror(self.unlink, fullname, e)
+            # self.scandir() is not a list and is a true iterator, it can
+            # raise an exception and blow-up. The try-except block here is to
+            # handle it gracefully and return.
+            onerror(self.scandir, path, e)
+
         try:
             self.rmdir(path)
         except OSError as e:
@@ -1464,39 +1467,65 @@ class Volume(object):
 
     def walk(self, top, topdown=True, onerror=None, followlinks=False):
         """
-        Directory tree generator. Yields a 3-tuple dirpath, dirnames, filenames
+        Generate the file names in a directory tree by walking the tree either
+        top-down or bottom-up.
 
-        dirpath is the path to the directory, dirnames is a list of the names
-        of the subdirectories in dirpath. filenames is a list of the names of
-        the non-directiry files in dirpath
+        Slight difference in behaviour in comparison to os.walk():
+        When os.walk() is called with 'followlinks=False' (default), symlinks
+        to directories are included in the 'dirnames' list. When Volume.walk()
+        is called with 'followlinks=False' (default), symlinks to directories
+        are included in 'filenames' list. This is NOT a bug.
+        http://python.6.x6.nabble.com/os-walk-with-followlinks-False-td3559133.html
 
+        :param top: Directory path to walk
+        :param topdown: If topdown is True or not specified, the triple for a
+                        directory is generated before the triples for any of
+                        its subdirectories. If topdown is False, the triple
+                        for a directory is generated after the triples for all
+                        of its subdirectories.
+        :param onerror: If optional argument onerror is specified, it should be
+                        a function; it will be called with one argument, an
+                        OSError instance. It can report the error to continue
+                        with the walk, or raise exception to abort the walk.
+        :param followlinks: Set followlinks to True to visit directories
+                            pointed to by symlinks.
         :raises: OSError on failure if onerror is None
+        :yields: a 3-tuple (dirpath, dirnames, filenames) where dirpath is a
+                 string, the path to the directory. dirnames is a list of the
+                 names of the subdirectories in dirpath (excluding '.' and
+                 '..'). filenames is a list of the names of the non-directory
+                 files in dirpath.
         """
-        # TODO: Write a more efficient walk by leveraging d_type information
-        #       returned in readdir.
+        dirs = []  # List of DirEntry objects
+        nondirs = []  # List of names (strings)
+
         try:
-            names = self.listdir(top)
+            for entry in self.scandir(top):
+                if entry.is_dir(follow_symlinks=followlinks):
+                    dirs.append(entry)
+                else:
+                    nondirs.append(entry.name)
         except OSError as err:
+            # self.scandir() is not a list and is a true iterator, it can
+            # raise an exception and blow-up. The try-except block here is to
+            # handle it gracefully and return.
             if onerror is not None:
                 onerror(err)
             return
 
-        dirs, nondirs = [], []
-        for name in names:
-            if self.isdir(os.path.join(top, name)):
-                dirs.append(name)
-            else:
-                nondirs.append(name)
-
         if topdown:
-            yield top, dirs, nondirs
-        for name in dirs:
-            new_path = os.path.join(top, name)
-            if followlinks or not self.islink(new_path):
+            yield top, [d.name for d in dirs], nondirs
+
+        for directory in dirs:
+            # NOTE: Both is_dir() and is_symlink() can be true for the same
+            # path when follow_symlinks is set to True
+            if followlinks or not directory.is_symlink():
+                new_path = os.path.join(top, directory.name)
                 for x in self.walk(new_path, topdown, onerror, followlinks):
                     yield x
+
         if not topdown:
-            yield top, dirs, nondirs
+            yield top, [d.name for d in dirs], nondirs
 
     def samefile(self, path1, path2):
         """
@@ -1630,3 +1659,76 @@ class Volume(object):
             dst = os.path.join(dst, os.path.basename(src))
         self.copyfile(src, dst)
         self.copystat(src, dst)
+
+    def copytree(self, src, dst, symlinks=False, ignore=None):
+        """
+        Recursively copy a directory tree using copy2().
+
+        The destination directory must not already exist.
+        If exception(s) occur, an Error is raised with a list of reasons.
+
+        If the optional symlinks flag is true, symbolic links in the
+        source tree result in symbolic links in the destination tree; if
+        it is false, the contents of the files pointed to by symbolic
+        links are copied.
+
+        The optional ignore argument is a callable. If given, it
+        is called with the 'src' parameter, which is the directory
+        being visited by copytree(), and 'names' which is the list of
+        'src' contents, as returned by os.listdir():
+
+            callable(src, names) -> ignored_names
+
+        Since copytree() is called recursively, the callable will be
+        called once for each directory that is copied. It returns a
+        list of names relative to the 'src' directory that should
+        not be copied.
+        """
+        def _isdir(path, statinfo, follow_symlinks=False):
+            if stat.S_ISDIR(statinfo.st_mode):
+                return True
+            if follow_symlinks and stat.S_ISLNK(statinfo.st_mode):
+                return self.isdir(path)
+            return False
+
+        # Can't used scandir() here to support ignored_names functionality
+        names_with_stat = self.listdir_with_stat(src)
+        if ignore is not None:
+            ignored_names = ignore(src, [n for n, s in names_with_stat])
+        else:
+            ignored_names = set()
+
+        self.makedirs(dst)
+        errors = []
+        for (name, st) in names_with_stat:
+            if name in ignored_names:
+                continue
+            srcpath = os.path.join(src, name)
+            dstpath = os.path.join(dst, name)
+            try:
+                if symlinks and stat.S_ISLNK(st.st_mode):
+                    linkto = self.readlink(srcpath)
+                    self.symlink(linkto, dstpath)
+                # shutil's copytree() calls os.path.isdir() which will return
+                # true even if it's a symlink pointing to a dir. Mimicking the
+                # same behaviour here with _isdir()
+                elif _isdir(srcpath, st, follow_symlinks=not symlinks):
+                    self.copytree(srcpath, dstpath, symlinks)
+                else:
+                    # The following is equivalent of copy2(). copy2() is not
+                    # invoked directly to avoid multiple duplicate stat calls.
+                    with self.fopen(srcpath, 'rb') as fsrc:
+                        with self.fopen(dstpath, 'wb') as fdst:
+                            self.copyfileobj(fsrc, fdst)
+                    self.utime(dstpath, (st.st_atime, st.st_mtime))
+                    self.chmod(dstpath, stat.S_IMODE(st.st_mode))
+            except (Error, EnvironmentError, OSError) as why:
+                errors.append((srcpath, dstpath, str(why)))
+
+        try:
+            self.copystat(src, dst)
+        except OSError as why:
+            errors.append((src, dst, str(why)))
+
+        if errors:
+            raise Error(errors)
