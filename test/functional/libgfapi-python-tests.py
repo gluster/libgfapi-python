@@ -658,10 +658,9 @@ class FileOpsTest(unittest.TestCase):
         self.assertEqual(src_file_checksum.hexdigest(),
                          dest_file_checksum.hexdigest())
 
-        # The destination file should not have same atime and mtime
+        # The destination file should not have same mtime
         src_stat = self.vol.stat(src_file)
         dest_stat = self.vol.stat(dest_file)
-        self.assertNotEqual(src_stat.st_atime, dest_stat.st_atime)
         self.assertNotEqual(src_stat.st_mtime, dest_stat.st_mtime)
 
         # Test over-writing destination that exists
@@ -766,6 +765,8 @@ class FileOpsTest(unittest.TestCase):
             for i in xrange(2):
                 f.write(os.urandom(128 * 1024))
             f.write(os.urandom(25 * 1024))
+        (atime, mtime) = (692884800, 692884800)
+        self.vol.utime(src_file, (atime, mtime))
 
         # Calculate checksum of source file.
         src_file_checksum = hashlib.md5()
@@ -775,7 +776,7 @@ class FileOpsTest(unittest.TestCase):
         # Copy file into dir
         dest_dir = uuid4().hex
         self.vol.mkdir(dest_dir)
-        self.vol.copy(src_file, dest_dir)
+        self.vol.copy2(src_file, dest_dir)
 
         # Calculate checksum of destination
         dest_file = os.path.join(dest_dir, src_file)
@@ -791,7 +792,6 @@ class FileOpsTest(unittest.TestCase):
         src_stat = self.vol.stat(src_file)
         dest_stat = self.vol.stat(dest_file)
         self.assertEqual(src_stat.st_mode, dest_stat.st_mode)
-        self.assertEqual(src_stat.st_atime, dest_stat.st_atime)
         self.assertEqual(src_stat.st_mtime, dest_stat.st_mtime)
 
 
