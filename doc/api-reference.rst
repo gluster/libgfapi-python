@@ -11,6 +11,11 @@ Volume Class
 
     .. automethod:: gluster.gfapi.Volume.__init__
 
+.. autoclass:: gluster.gfapi.DirEntry
+    :members:
+    :undoc-members:
+    :noindex:
+
 File Class
 ----------
 

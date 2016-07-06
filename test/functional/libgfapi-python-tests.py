@@ -10,16 +10,18 @@
 
 import unittest
 import os
+import stat
 import types
 import errno
 import hashlib
 import threading
-
-from gluster.gfapi import File, Volume
-from gluster.exceptions import LibgfapiException, Error
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
+
+from gluster.api import Stat
+from gluster.gfapi import File, Volume, DirEntry
+from gluster.exceptions import LibgfapiException, Error
 
 config = get_test_config()
 if config:
@@ -844,6 +846,33 @@ class DirOpsTest(unittest.TestCase):
         dir_list = self.vol.listdir(self.dir_path)
         dir_list.sort()
         self.assertEqual(dir_list, ["testfile0", "testfile1", "testfile2"])
+
+    def test_listdir_with_stat(self):
+        dir_list = self.vol.listdir_with_stat(self.dir_path)
+        dir_list_sorted = sorted(dir_list, key=lambda tup: tup[0])
+        for index, (name, stat_info) in enumerate(dir_list_sorted):
+            self.assertEqual(name, 'testfile%s' % (index))
+            self.assertTrue(isinstance(stat_info, Stat))
+            self.assertTrue(stat.S_ISREG(stat_info.st_mode))
+            self.assertEqual(stat_info.st_size, len(self.data))
+
+        # Error - path does not exist
+        self.assertRaises(OSError,
+                          self.vol.listdir_with_stat, 'non-existent-dir')
+
+    def test_scandir(self):
+        entries = []
+        for entry in self.vol.scandir(self.dir_path):
+            self.assertTrue(isinstance(entry, DirEntry))
+            entries.append(entry)
+
+        entries_sorted = sorted(entries, key=lambda e: e.name)
+        for index, entry in enumerate(entries_sorted):
+            self.assertEqual(entry.name, 'testfile%s' % (index))
+            self.assertTrue(entry.is_file())
+            self.assertFalse(entry.is_dir())
+            self.assertTrue(isinstance(entry.stat(), Stat))
+            self.assertEqual(entry.stat().st_size, len(self.data))
 
     def test_makedirs(self):
         name = self.dir_path + "/subd1/subd2/subd3"
