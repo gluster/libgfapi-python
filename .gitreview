@@ -1,2 +1,6 @@
 [gerrit]
+host=review.gluster.org
+port=29418
+project=libgfapi-python.git
 defaultbranch=master
+defaultremote=gerrit
