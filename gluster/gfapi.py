@@ -20,6 +20,8 @@ from gluster import api
 from gluster.exceptions import LibgfapiException, Error
 from gluster.utils import validate_mount, validate_glfd
 
+__version__ = '1.0'
+
 # TODO: Move this utils.py
 python_mode_to_os_flags = {}
 

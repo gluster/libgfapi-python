@@ -10,18 +10,28 @@
 # later), or the GNU General Public License, version 2 (GPLv2), in all
 # cases as published by the Free Software Foundation.
 
+import os
+import re
 from setuptools import setup
 
-from gluster import __canonical_version__ as version
 
-
-name = 'gfapi'
+# Get version without importing.
+gfapi_file_path = os.path.join(os.path.dirname(__file__), 'gluster/gfapi.py')
+with open(gfapi_file_path) as f:
+    for line in f:
+        match = re.match(r"__version__.*'([0-9.]+)'", line)
+        if match:
+            version = match.group(1)
+            break
+    else:
+        raise Exception("Couldn't find version in setup.py")
 
 
 setup(
-    name=name,
+    name='gfapi',
     version=version,
     description='Python bindings for GlusterFS libgfapi',
+    long_description='Python bindings for GlusterFS libgfapi',
     license='GPLv2 or LGPLv3+',
     author='Red Hat, Inc.',
     author_email='gluster-devel@gluster.org',
@@ -40,7 +50,4 @@ setup(
         'Programming Language :: Python :: 2.7'
         'Topic :: System :: Filesystems'
     ],
-    install_requires=[],
-    scripts=[],
-    entry_points={},
 )

@@ -1,8 +1,5 @@
-include README.md LICENSE
-include functional_tests.sh unittests.sh
-include test-requirements.txt
-include tox.ini
+include README.md COPYING-GPLV2 COPYING-LGPLV3 MAINTAINERS
+include .functests .unittests test-requirements.txt tox.ini test/test.conf
 recursive-include gluster *.py
 recursive-include test *.py
-include test/test.conf
 graft doc
