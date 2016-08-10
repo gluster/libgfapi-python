@@ -12,11 +12,12 @@
 
 import os
 import re
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 # Get version without importing.
-gfapi_file_path = os.path.join(os.path.dirname(__file__), 'gluster/gfapi.py')
+gfapi_file_path = os.path.join(os.path.dirname(__file__),
+                               'gluster/gfapi/__init__.py')
 with open(gfapi_file_path) as f:
     for line in f:
         match = re.match(r"__version__.*'([0-9.]+)'", line)
@@ -36,7 +37,7 @@ setup(
     author='Red Hat, Inc.',
     author_email='gluster-devel@gluster.org',
     url='http://www.gluster.org',
-    packages=['gluster', ],
+    packages=find_packages(exclude=['test*']),
     test_suite='nose.collector',
     classifiers=[
         'Development Status :: 5 - Production/Stable'

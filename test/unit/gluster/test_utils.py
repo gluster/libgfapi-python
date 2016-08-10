@@ -10,8 +10,8 @@
 
 import unittest
 
-from gluster import utils
-from gluster.exceptions import VolumeNotMounted
+from gluster.gfapi import utils
+from gluster.gfapi.exceptions import VolumeNotMounted
 
 
 class TestUtils(unittest.TestCase):

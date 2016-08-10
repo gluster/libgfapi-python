@@ -11,7 +11,7 @@
 import os
 import errno
 from functools import wraps
-from gluster.exceptions import VolumeNotMounted
+from gluster.gfapi.exceptions import VolumeNotMounted
 
 
 def validate_mount(func):

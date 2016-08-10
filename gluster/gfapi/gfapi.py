@@ -16,11 +16,9 @@ import stat
 import errno
 from collections import Iterator
 
-from gluster import api
-from gluster.exceptions import LibgfapiException, Error
-from gluster.utils import validate_mount, validate_glfd
-
-__version__ = '1.0'
+from gluster.gfapi import api
+from gluster.gfapi.exceptions import LibgfapiException, Error
+from gluster.gfapi.utils import validate_mount, validate_glfd
 
 # TODO: Move this utils.py
 python_mode_to_os_flags = {}

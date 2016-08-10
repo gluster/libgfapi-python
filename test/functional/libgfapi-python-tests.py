@@ -19,9 +19,9 @@ from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
 
-from gluster.api import Stat
+from gluster.gfapi.api import Stat
 from gluster.gfapi import File, Volume, DirEntry
-from gluster.exceptions import LibgfapiException, Error
+from gluster.gfapi.exceptions import LibgfapiException, Error
 
 config = get_test_config()
 if config:
