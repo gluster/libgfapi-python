@@ -28,11 +28,15 @@ with open(gfapi_file_path) as f:
         raise Exception("Couldn't find version in setup.py")
 
 
+def read(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
+
 setup(
     name='gfapi',
     version=version,
     description='Python bindings for GlusterFS libgfapi',
-    long_description='Python bindings for GlusterFS libgfapi',
+    long_description=read('README.rst'),
     license='GPLv2 or LGPLv3+',
     author='Red Hat, Inc.',
     author_email='gluster-devel@gluster.org',
