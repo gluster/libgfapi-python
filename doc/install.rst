@@ -1,11 +1,13 @@
 Installation
 ============
 
-Install glusterfs libgfapi C library:
+Install libgfapi-python from yum/dnf repo:
 
 .. code-block:: console
 
-    $ sudo yum install glusterfs-api
+    $ sudo yum install python-glusterfs-api
+
+OR
 
 Install libgfapi-python from `PyPI <https://pypi.python.org/pypi/gfapi/>`_:
 

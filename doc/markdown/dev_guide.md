@@ -1,10 +1,8 @@
-#Developer Guide
+# Developer Guide
 
 ## Development Environment Setup
 
-The workflow for libgfapi-python is largely based upon the [Gluster-Swift Developer Guide][]  and [OpenStack Gerrit Workflow][]. Refer to those documents for setting up a Gerrit account and a complete development environment.
-
-This document focuses on setting up a quick environment for running tox tests (especially the functional tests). This document also assumes that GlusterFS is already installed. On CentOS/RHEL you will need to setup GlsuterFS and EPEL repos.
+This document focuses on setting up a quick environment for running tox tests (especially the functional tests). This document also assumes that GlusterFS is already installed. On CentOS/RHEL you will need to setup GlusterFS and EPEL repos.
 
 
 ### Package Requirements
@@ -17,7 +15,7 @@ sudo apt-get -y install gcc python-dev python-setuptools libffi-dev \
     git xfsprogs memcached
 ```
 
-* Fedora 19
+* Fedora
 
 ```
 sudo yum install gcc python-devel python-setuptools libffi-devel \
