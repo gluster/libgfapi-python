@@ -629,7 +629,8 @@ class Volume(object):
         """
         Create a Volume object instance.
 
-        :param host: Host with glusterd management daemon running.
+        :param host: Host with glusterd management daemon running OR
+        :            path to socket file which glusterd is listening on.
         :param volname: Name of GlusterFS volume to be mounted and used.
         :param proto: Transport protocol to be used to connect to management
                       daemon. Permitted values are "tcp" and "rdma".
@@ -658,7 +659,7 @@ class Volume(object):
         if None in (volname, host):
             # TODO: Validate host based on regex for IP/FQDN.
             raise LibgfapiException("Host and Volume name should not be None.")
-        if proto not in ('tcp', 'rdma'):
+        if proto not in ('tcp', 'rdma', 'unix'):
             raise LibgfapiException("Invalid protocol specified.")
         if not isinstance(port, (int, long)):
             raise LibgfapiException("Invalid port specified.")

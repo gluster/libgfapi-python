@@ -37,6 +37,8 @@ else:
     HOST = 'localhost'
     VOLNAME = 'test'
 
+GLUSTERD_SOCK_FILE = "/var/run/glusterd.socket"
+
 
 class BinFileOpsTest(unittest.TestCase):
 
@@ -1148,5 +1150,12 @@ class TestVolumeInit(unittest.TestCase):
         vol.set_logging(log_file2, 7)
         self.assertEqual(vol.log_file, log_file2)
         # Unmount the volume
+        vol.umount()
+        self.assertFalse(vol.mounted)
+
+    def test_unix_socket_mount(self):
+        vol = Volume(GLUSTERD_SOCK_FILE, VOLNAME, proto="unix")
+        vol.mount()
+        self.assertTrue(vol.mounted)
         vol.umount()
         self.assertFalse(vol.mounted)
