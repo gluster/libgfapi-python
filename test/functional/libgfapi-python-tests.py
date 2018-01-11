@@ -15,6 +15,7 @@ import types
 import errno
 import hashlib
 import threading
+import uuid
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
@@ -1159,3 +1160,17 @@ class TestVolumeInit(unittest.TestCase):
         self.assertTrue(vol.mounted)
         vol.umount()
         self.assertFalse(vol.mounted)
+
+    def test_get_volume_id(self):
+        vol = Volume(HOST, VOLNAME)
+        vol.mount()
+        self.assertTrue(vol.mounted)
+        self.assertTrue(vol.volid == None)
+        volid = vol.get_volume_id()
+        self.assertTrue(volid != None)
+        try:
+            volid = uuid.UUID(str(volid))
+        except ValueError:
+            self.fail("Invalid UUID")
+        self.assertTrue(vol.volid != None)
+        vol.umount()

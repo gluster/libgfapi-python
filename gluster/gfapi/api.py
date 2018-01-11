@@ -510,3 +510,8 @@ glfs_utimens = gfapi_prototype('glfs_utimens', ctypes.c_int,
                                ctypes.c_void_p,
                                ctypes.c_char_p,
                                ctypes.POINTER(Timespec))
+
+glfs_get_volumeid = gfapi_prototype('glfs_get_volumeid', ctypes.c_int,
+                                    ctypes.c_void_p,
+                                    ctypes.c_char_p,
+                                    ctypes.c_size_t)

@@ -14,6 +14,7 @@ import math
 import time
 import stat
 import errno
+import uuid
 from collections import Iterator
 
 from gluster.gfapi import api
@@ -666,6 +667,7 @@ class Volume(object):
 
         self.host = host
         self.volname = volname
+        self.volid = None
         self.protocol = proto
         self.port = port
 
@@ -768,6 +770,23 @@ class Volume(object):
                                          os.strerror(err)))
         self.log_file = log_file
         self.log_level = log_level
+
+    @validate_mount
+    def get_volume_id(self):
+        """
+        Returns the volume ID (of type uuid.UUID) for the currently mounted
+        volume.
+        """
+        if self.volid != None:
+            return self.volid
+        size = 16
+        buf = ctypes.create_string_buffer(size)
+        ret = api.glfs_get_volumeid(self.fs, buf, size)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))
+        self.volid = uuid.UUID(bytes=buf.raw)
+        return self.volid
 
     @validate_mount
     def access(self, path, mode):
