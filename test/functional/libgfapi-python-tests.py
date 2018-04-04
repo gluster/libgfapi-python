@@ -16,6 +16,7 @@ import errno
 import hashlib
 import threading
 import uuid
+from nose import SkipTest
 from test import get_test_config
 from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
@@ -1155,6 +1156,8 @@ class TestVolumeInit(unittest.TestCase):
         self.assertFalse(vol.mounted)
 
     def test_unix_socket_mount(self):
+        if not os.access(GLUSTERD_SOCK_FILE, os.R_OK | os.W_OK):
+            raise SkipTest("Unix socket file %s not accessible" % GLUSTERD_SOCK_FILE)
         vol = Volume(GLUSTERD_SOCK_FILE, VOLNAME, proto="unix")
         vol.mount()
         self.assertTrue(vol.mounted)
