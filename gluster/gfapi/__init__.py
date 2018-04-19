@@ -10,5 +10,5 @@
 
 __version__ = '1.1'
 
-from gfapi import File, Dir, DirEntry, Volume
+from .gfapi import File, Dir, DirEntry, Volume
 __all__ = ['File', 'Dir', 'DirEntry', 'Volume']
