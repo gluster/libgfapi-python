@@ -8,7 +8,10 @@
 # later), or the GNU General Public License, version 2 (GPLv2), in all
 # cases as published by the Free Software Foundation.
 
+from __future__ import unicode_literals
+
 import ctypes
+import sys
 import os
 import math
 import time
@@ -23,6 +26,13 @@ from gluster.gfapi.utils import validate_mount, validate_glfd
 
 # TODO: Move this utils.py
 python_mode_to_os_flags = {}
+
+
+PY3 = sys.version_info >= (3, 0)
+if PY3:
+    string_types = (str,)
+else:
+    string_types = (str, unicode)
 
 
 def _populate_mode_to_flags_dict():
@@ -41,6 +51,32 @@ def _populate_mode_to_flags_dict():
         python_mode_to_os_flags[mode] = os.O_RDWR | os.O_CREAT | os.O_APPEND
 
 _populate_mode_to_flags_dict()
+
+
+def decode_to_bytes(text):
+    """
+    Decode unicode object to bytes
+    or return original object if already bytes
+    """
+    if isinstance(text, string_types):
+        return text.encode('utf-8')
+    elif isinstance(text, bytes):
+        return text
+    else:
+        raise ValueError('Cannot convert object with type %s' % type(text))
+
+
+def encode_to_string(text):
+    """
+    Encode bytes objects to unicode str
+    or return original object if already unicode
+    """
+    if isinstance(text, string_types):
+        return text
+    elif isinstance(text, bytes):
+        return text.decode('utf-8')
+    else:
+        raise ValueError('Cannot convert object with type %s' % type(text))
 
 
 class File(object):
@@ -238,17 +274,18 @@ class File(object):
         :raises: OSError on failure
         """
         if size == 0:
-            size = api.glfs_fgetxattr(self.fd, key, None, size)
+            size = api.glfs_fgetxattr(self.fd, decode_to_bytes(key),
+                                      None, size)
             if size < 0:
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err))
 
         buf = ctypes.create_string_buffer(size)
-        rc = api.glfs_fgetxattr(self.fd, key, buf, size)
+        rc = api.glfs_fgetxattr(self.fd, decode_to_bytes(key), buf, size)
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return buf.value[:rc]
+        return encode_to_string(buf.value[:rc])
 
     @validate_glfd
     def flistxattr(self, size=0):
@@ -279,17 +316,23 @@ class File(object):
         # buffer" format.
         i = 0
         while i < rc:
-            new_xa = buf.raw[i]
+            if PY3:
+                new_xa = str(bytes([buf.raw[i]]), 'utf-8')
+            else:
+                new_xa = buf.raw[i]
             i += 1
             while i < rc:
-                next_char = buf.raw[i]
+                if PY3:
+                    next_char = str(bytes([buf.raw[i]]), 'utf-8')
+                else:
+                    next_char = buf.raw[i]
                 i += 1
                 if next_char == '\0':
                     xattrs.append(new_xa)
                     break
                 new_xa += next_char
         xattrs.sort()
-        return xattrs
+        return [encode_to_string(x) for x in xattrs]
 
     @validate_glfd
     def fsetxattr(self, key, value, flags=0):
@@ -307,7 +350,9 @@ class File(object):
                       does not already exist.
         :raises: OSError on failure
         """
-        ret = api.glfs_fsetxattr(self.fd, key, value, len(value), flags)
+        ret = api.glfs_fsetxattr(self.fd, decode_to_bytes(key),
+                                 decode_to_bytes(value),
+                                 len(decode_to_bytes(value)), flags)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -320,7 +365,7 @@ class File(object):
         :param key: The key of extended attribute.
         :raises: OSError on failure
         """
-        ret = api.glfs_fremovexattr(self.fd, key)
+        ret = api.glfs_fremovexattr(self.fd, decode_to_bytes(key))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -488,7 +533,7 @@ class Dir(Iterator):
         self._api.glfs_closedir(self.fd)
         self._api = None
 
-    def next(self):
+    def __next__(self):
         entry = api.Dirent()
         entry.d_reclen = 256
 
@@ -514,6 +559,8 @@ class Dir(Iterator):
         else:
             return entry
 
+    next = __next__  # Python 2
+
 
 class DirEntry(object):
     """
@@ -532,11 +579,11 @@ class DirEntry(object):
     __slots__ = ('_name', '_vol', '_lstat', '_stat', '_path')
 
     def __init__(self, vol, scandir_path, name, lstat):
-        self._name = name
+        self._name = encode_to_string(name)
         self._vol = vol
         self._lstat = lstat
         self._stat = None
-        self._path = os.path.join(scandir_path, name)
+        self._path = os.path.join(scandir_path, self._name)
 
     @property
     def name(self):
@@ -662,7 +709,7 @@ class Volume(object):
             raise LibgfapiException("Host and Volume name should not be None.")
         if proto not in ('tcp', 'rdma', 'unix'):
             raise LibgfapiException("Invalid protocol specified.")
-        if not isinstance(port, (int, long)):
+        if not isinstance(port, int):
             raise LibgfapiException("Invalid port specified.")
 
         self.host = host
@@ -690,14 +737,16 @@ class Volume(object):
             # Already mounted
             return
 
-        self.fs = api.glfs_new(self.volname)
+        self.fs = api.glfs_new(decode_to_bytes(self.volname))
         if not self.fs:
             err = ctypes.get_errno()
             raise LibgfapiException("glfs_new(%s) failed: %s" %
                                     (self.volname, os.strerror(err)))
 
-        ret = api.glfs_set_volfile_server(self.fs, self.protocol,
-                                          self.host, self.port)
+        ret = api.glfs_set_volfile_server(self.fs,
+                                          decode_to_bytes(self.protocol),
+                                          decode_to_bytes(self.host),
+                                          self.port)
         if ret < 0:
             err = ctypes.get_errno()
             raise LibgfapiException("glfs_set_volfile_server(%s, %s, %s, "
@@ -762,7 +811,8 @@ class Volume(object):
                           Higher the value, more verbose the logging.
         """
         if self.fs:
-            ret = api.glfs_set_logging(self.fs, log_file, log_level)
+            ret = api.glfs_set_logging(self.fs, decode_to_bytes(log_file),
+                                       log_level)
             if ret < 0:
                 err = ctypes.get_errno()
                 raise LibgfapiException("glfs_set_logging(%s, %s) failed: %s" %
@@ -805,7 +855,7 @@ class Volume(object):
                      and X_OK to test permissions
         :returns: True if access is allowed, False if not
         """
-        ret = api.glfs_access(self.fs, path, mode)
+        ret = api.glfs_access(self.fs, decode_to_bytes(path), mode)
         if ret == 0:
             return True
         else:
@@ -819,7 +869,7 @@ class Volume(object):
         :param path: Path to change current working directory to
         :raises: OSError on failure
         """
-        ret = api.glfs_chdir(self.fs, path)
+        ret = api.glfs_chdir(self.fs, decode_to_bytes(path))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -833,7 +883,7 @@ class Volume(object):
         :param mode: new mode
         :raises: OSError on failure
         """
-        ret = api.glfs_chmod(self.fs, path, mode)
+        ret = api.glfs_chmod(self.fs, decode_to_bytes(path), mode)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -848,7 +898,7 @@ class Volume(object):
         :param gid: new group id for path
         :raises: OSError on failure
         """
-        ret = api.glfs_chown(self.fs, path, uid, gid)
+        ret = api.glfs_chown(self.fs, decode_to_bytes(path), uid, gid)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -888,10 +938,9 @@ class Volume(object):
         PATH_MAX = 4096
         buf = ctypes.create_string_buffer(PATH_MAX)
         ret = api.glfs_getcwd(self.fs, buf, PATH_MAX)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise OSError(err, os.strerror(err))
-        return buf.value
+        if not ret:
+            raise OSError(errno.ENOENT, os.strerror(errno.ENOENT))
+        return encode_to_string(buf.value)
 
     def getmtime(self, path):
         """
@@ -922,17 +971,19 @@ class Volume(object):
         :raises: OSError on failure
         """
         if size == 0:
-            size = api.glfs_getxattr(self.fs, path, key, None, 0)
+            size = api.glfs_getxattr(self.fs, decode_to_bytes(path),
+                                     decode_to_bytes(key), None, 0)
             if size < 0:
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err))
 
         buf = ctypes.create_string_buffer(size)
-        rc = api.glfs_getxattr(self.fs, path, key, buf, size)
+        rc = api.glfs_getxattr(self.fs, decode_to_bytes(path),
+                               decode_to_bytes(key), buf, size)
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return buf.value[:rc]
+        return encode_to_string(buf.value[:rc])
 
     def isdir(self, path):
         """
@@ -983,7 +1034,7 @@ class Volume(object):
         for entry in self.opendir(path):
             if not isinstance(entry, api.Dirent):
                 break
-            name = entry.d_name[:entry.d_reclen]
+            name = encode_to_string(entry.d_name[:entry.d_reclen])
             if name not in (".", ".."):
                 dir_list.append(name)
         return dir_list
@@ -1007,7 +1058,7 @@ class Volume(object):
             if not (isinstance(entry, api.Dirent) and
                     isinstance(stat_info, api.Stat)):
                 break
-            name = entry.d_name[:entry.d_reclen]
+            name = encode_to_string(entry.d_name[:entry.d_reclen])
             if name not in (".", ".."):
                 entries_with_stat.append((name, stat_info))
         return entries_with_stat
@@ -1034,7 +1085,7 @@ class Volume(object):
         """
         for (entry, lstat) in self.opendir(path, readdirplus=True):
             name = entry.d_name[:entry.d_reclen]
-            if name not in (".", ".."):
+            if name not in (b".", b".."):
                 yield DirEntry(self, path, name, lstat)
 
     @validate_mount
@@ -1051,13 +1102,13 @@ class Volume(object):
         :raises: OSError on failure
         """
         if size == 0:
-            size = api.glfs_listxattr(self.fs, path, None, 0)
+            size = api.glfs_listxattr(self.fs, decode_to_bytes(path), None, 0)
             if size < 0:
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err))
 
         buf = ctypes.create_string_buffer(size)
-        rc = api.glfs_listxattr(self.fs, path, buf, size)
+        rc = api.glfs_listxattr(self.fs, decode_to_bytes(path), buf, size)
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1067,17 +1118,23 @@ class Volume(object):
         # buffer" format.
         i = 0
         while i < rc:
-            new_xa = buf.raw[i]
+            if PY3:
+                new_xa = str(bytes([buf.raw[i]]), 'utf-8')
+            else:
+                new_xa = buf.raw[i]
             i += 1
             while i < rc:
-                next_char = buf.raw[i]
+                if PY3:
+                    next_char = str(bytes([buf.raw[i]]), 'utf-8')
+                else:
+                    next_char = buf.raw[i]
                 i += 1
                 if next_char == '\0':
                     xattrs.append(new_xa)
                     break
                 new_xa += next_char
         xattrs.sort()
-        return xattrs
+        return [encode_to_string(x) for x in xattrs]
 
     @validate_mount
     def lstat(self, path):
@@ -1089,13 +1146,13 @@ class Volume(object):
         :raises: OSError on failure
         """
         s = api.Stat()
-        rc = api.glfs_lstat(self.fs, path, ctypes.byref(s))
+        rc = api.glfs_lstat(self.fs, decode_to_bytes(path), ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
         return s
 
-    def makedirs(self, path, mode=0777):
+    def makedirs(self, path, mode=0o777):
         """
         Recursive directory creation function. Like mkdir(), but makes all
         intermediate-level directories needed to contain the leaf directory.
@@ -1119,14 +1176,14 @@ class Volume(object):
         self.mkdir(path, mode)
 
     @validate_mount
-    def mkdir(self, path, mode=0777):
+    def mkdir(self, path, mode=0o777):
         """
         Create a directory named path with numeric mode mode.
         The default mode is 0777 (octal).
 
         :raises: OSError on failure
         """
-        ret = api.glfs_mkdir(self.fs, path, mode)
+        ret = api.glfs_mkdir(self.fs, decode_to_bytes(path), mode)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1156,7 +1213,7 @@ class Volume(object):
         :raises: OSError on failure to create/open file.
                  TypeError and ValueError if mode is invalid.
         """
-        if not isinstance(mode, basestring):
+        if not isinstance(mode, string_types):
             raise TypeError("Mode must be a string")
         try:
             flags = python_mode_to_os_flags[mode]
@@ -1164,16 +1221,17 @@ class Volume(object):
             raise ValueError("Invalid mode")
         else:
             if (os.O_CREAT & flags) == os.O_CREAT:
-                fd = api.glfs_creat(self.fs, path, flags, 0666)
+                fd = api.glfs_creat(self.fs, decode_to_bytes(path),
+                                    flags, 0o666)
             else:
-                fd = api.glfs_open(self.fs, path, flags)
+                fd = api.glfs_open(self.fs, decode_to_bytes(path), flags)
             if not fd:
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err))
             return File(fd, path=path, mode=mode)
 
     @validate_mount
-    def open(self, path, flags, mode=0777):
+    def open(self, path, flags, mode=0o777):
         """
         Similar to Python's os.open()
 
@@ -1193,9 +1251,9 @@ class Volume(object):
             raise TypeError("flags must evaluate to an integer")
 
         if (os.O_CREAT & flags) == os.O_CREAT:
-            fd = api.glfs_creat(self.fs, path, flags, mode)
+            fd = api.glfs_creat(self.fs, decode_to_bytes(path), flags, mode)
         else:
-            fd = api.glfs_open(self.fs, path, flags)
+            fd = api.glfs_open(self.fs, decode_to_bytes(path), flags)
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1213,7 +1271,7 @@ class Volume(object):
         :returns: Returns a instance of Dir class
         :raises: OSError on failure
         """
-        fd = api.glfs_opendir(self.fs, path)
+        fd = api.glfs_opendir(self.fs, decode_to_bytes(path))
         if not fd:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1231,11 +1289,11 @@ class Volume(object):
         """
         PATH_MAX = 4096
         buf = ctypes.create_string_buffer(PATH_MAX)
-        ret = api.glfs_readlink(self.fs, path, buf, PATH_MAX)
+        ret = api.glfs_readlink(self.fs, decode_to_bytes(path), buf, PATH_MAX)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
-        return buf.value[:ret]
+        return encode_to_string(buf.value[:ret])
 
     def remove(self, path):
         """
@@ -1255,7 +1313,8 @@ class Volume(object):
         :param key: The key of extended attribute.
         :raises: OSError on failure
         """
-        ret = api.glfs_removexattr(self.fs, path, key)
+        ret = api.glfs_removexattr(self.fs, decode_to_bytes(path),
+                                   decode_to_bytes(key))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1269,7 +1328,8 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_rename(self.fs, src, dst)
+        ret = api.glfs_rename(self.fs, decode_to_bytes(src),
+                              decode_to_bytes(dst))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1283,7 +1343,7 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_rmdir(self.fs, path)
+        ret = api.glfs_rmdir(self.fs, decode_to_bytes(path))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1377,7 +1437,9 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_setxattr(self.fs, path, key, value, len(value), flags)
+        ret = api.glfs_setxattr(self.fs, decode_to_bytes(path),
+                                decode_to_bytes(key), decode_to_bytes(value),
+                                len(decode_to_bytes(value)), flags)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1390,7 +1452,7 @@ class Volume(object):
         :raises: OSError on failure
         """
         s = api.Stat()
-        rc = api.glfs_stat(self.fs, path, ctypes.byref(s))
+        rc = api.glfs_stat(self.fs, decode_to_bytes(path), ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1411,7 +1473,7 @@ class Volume(object):
         :raises: OSError on failure
         """
         s = api.Statvfs()
-        rc = api.glfs_statvfs(self.fs, path, ctypes.byref(s))
+        rc = api.glfs_statvfs(self.fs, decode_to_bytes(path), ctypes.byref(s))
         if rc < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1424,7 +1486,8 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_link(self.fs, source, link_name)
+        ret = api.glfs_link(self.fs, decode_to_bytes(source),
+                            decode_to_bytes(link_name))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1436,7 +1499,8 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_symlink(self.fs, source, link_name)
+        ret = api.glfs_symlink(self.fs, decode_to_bytes(source),
+                               decode_to_bytes(link_name))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1448,7 +1512,7 @@ class Volume(object):
 
         :raises: OSError on failure
         """
-        ret = api.glfs_unlink(self.fs, path)
+        ret = api.glfs_unlink(self.fs, decode_to_bytes(path))
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1486,7 +1550,7 @@ class Volume(object):
         timespec_array[1].tv_sec = int(whole)
         timespec_array[1].tv_nsec = int(decimal * 1e9)
 
-        ret = api.glfs_utimens(self.fs, path, timespec_array)
+        ret = api.glfs_utimens(self.fs, decode_to_bytes(path), timespec_array)
         if ret < 0:
             err = ctypes.get_errno()
             raise OSError(err, os.strerror(err))
@@ -1727,6 +1791,7 @@ class Volume(object):
         self.makedirs(dst)
         errors = []
         for (name, st) in names_with_stat:
+            name = encode_to_string(name)
             if name in ignored_names:
                 continue
             srcpath = os.path.join(src, name)
