@@ -9,7 +9,10 @@
 # cases as published by the Free Software Foundation.
 
 import os
-import ConfigParser
+try:
+    from configparser import ConfigParser
+except ImportError:
+    from ConfigParser import ConfigParser
 
 
 def get_test_config():
@@ -22,7 +25,7 @@ def get_test_config():
     dirname = os.path.dirname(__file__)
     conf_file = dirname + "/test.conf"
     if os.path.exists(conf_file):
-        config = ConfigParser.ConfigParser()
+        config = ConfigParser()
         config.read(conf_file)
         return config
     return None

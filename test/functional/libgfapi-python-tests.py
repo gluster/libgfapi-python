@@ -8,8 +8,11 @@
 # later), or the GNU General Public License, version 2 (GPLv2), in all
 # cases as published by the Free Software Foundation.
 
+from __future__ import unicode_literals
+
 import unittest
 import os
+import sys
 import stat
 import types
 import errno
@@ -18,12 +21,17 @@ import threading
 import uuid
 from nose import SkipTest
 from test import get_test_config
-from ConfigParser import NoSectionError, NoOptionError
+try:
+    from configparser import NoSectionError, NoOptionError
+except ImportError:
+    from ConfigParser import NoSectionError, NoOptionError
 from uuid import uuid4
 
 from gluster.gfapi.api import Stat
 from gluster.gfapi import File, Volume, DirEntry
 from gluster.gfapi.exceptions import LibgfapiException, Error
+
+PY3 = sys.version_info >= (3, 0)
 
 config = get_test_config()
 if config:
@@ -66,7 +74,7 @@ class BinFileOpsTest(unittest.TestCase):
         payload = bytearray(data, "ascii")
         path = self._testMethodName + ".io"
         with File(self.vol.open(path,
-                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644)) as f:
+                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o644)) as f:
             f.write(payload)
         # Read binary data
         with File(self.vol.open(path, os.O_RDONLY)) as f:
@@ -94,10 +102,10 @@ class FileOpsTest(unittest.TestCase):
         cls.vol = None
 
     def setUp(self):
-        self.data = "gluster is awesome"
+        self.data = b"gluster is awesome"
         self.path = self._testMethodName + ".io"
         with File(self.vol.open(self.path,
-                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0644),
+                  os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o644),
                   path=self.path) as f:
             rc = f.write(self.data)
             self.assertEqual(rc, len(self.data))
@@ -112,7 +120,7 @@ class FileOpsTest(unittest.TestCase):
         with File(self.vol.open(self.path, os.O_RDONLY)) as f:
             self.assertTrue(isinstance(f, File))
             buf = f.read(len(self.data))
-            self.assertFalse(isinstance(buf, types.IntType))
+            self.assertFalse(isinstance(buf, int))
             self.assertEqual(buf, self.data)
 
     def test_open_file_not_exist(self):
@@ -171,11 +179,11 @@ class FileOpsTest(unittest.TestCase):
     def test_fopen(self):
         # Default permission should be 0666
         name = uuid4().hex
-        data = "Gluster is so awesome"
+        data = b"Gluster is so awesome"
         with self.vol.fopen(name, 'w') as f:
             f.write(data)
-        perms = self.vol.stat(name).st_mode & 0777
-        self.assertEqual(perms, int(0666))
+        perms = self.vol.stat(name).st_mode & 0o777
+        self.assertEqual(perms, int(0o666))
 
         # 'r': Open file for reading.
         # If not specified, mode should default to 'r'
@@ -218,18 +226,18 @@ class FileOpsTest(unittest.TestCase):
         with self.vol.fopen(name, 'a') as f:
             self.assertEqual('a', f.mode)
             # This should be appended at the end
-            f.write("hello")
+            f.write(b"hello")
         with self.vol.fopen(name) as f:
-            self.assertEqual(f.read(), data + "hello")
+            self.assertEqual(f.read(), data + b"hello")
 
         # 'a+': Open for reading and appending (writing at end of file)
         with self.vol.fopen(name, 'a+') as f:
             self.assertEqual('a+', f.mode)
             # This should be appended at the end
-            f.write(" world")
+            f.write(b" world")
             f.fsync()
             f.lseek(0, os.SEEK_SET)
-            self.assertEqual(f.read(), data + "hello world")
+            self.assertEqual(f.read(), data + b"hello world")
 
     def test_fopen_in_thread(self):
         def gluster_fopen():
@@ -256,7 +264,7 @@ class FileOpsTest(unittest.TestCase):
     def test_write_file_dup_lseek_read(self):
         try:
             f = File(self.vol.open("dune", os.O_CREAT | os.O_EXCL | os.O_RDWR))
-            f.write("I must not fear. Fear is the mind-killer.")
+            f.write(b"I must not fear. Fear is the mind-killer.")
             fdup = f.dup()
             self.assertTrue(isinstance(fdup, File))
             f.close()
@@ -264,13 +272,13 @@ class FileOpsTest(unittest.TestCase):
             self.assertEqual(ret, 0)
 
             buf = fdup.read(15)
-            self.assertEqual(buf, "I must not fear")
+            self.assertEqual(buf, b"I must not fear")
 
             ret = fdup.lseek(29, os.SEEK_SET)
             self.assertEqual(ret, 29)
 
             buf = fdup.read(11)
-            self.assertEqual(buf, "mind-killer")
+            self.assertEqual(buf, b"mind-killer")
 
             fdup.close()
         except OSError as e:
@@ -278,12 +286,18 @@ class FileOpsTest(unittest.TestCase):
 
     def test_chmod(self):
         stat = self.vol.stat(self.path)
-        orig_mode = oct(stat.st_mode & 0777)
-        self.assertEqual(orig_mode, '0644L')
-        self.vol.chmod(self.path, 0600)
+        orig_mode = oct(stat.st_mode & 0o777)
+        if PY3:
+            self.assertEqual(orig_mode, '0o644')
+        else:
+            self.assertEqual(orig_mode, '0644L')
+        self.vol.chmod(self.path, 0o600)
         stat = self.vol.stat(self.path)
-        new_mode = oct(stat.st_mode & 0777)
-        self.assertEqual(new_mode, '0600L')
+        new_mode = oct(stat.st_mode & 0o777)
+        if PY3:
+            self.assertEqual(new_mode, '0o600')
+        else:
+            self.assertEqual(new_mode, '0600L')
 
     def test_exists(self):
         e = self.vol.exists(self.path)
@@ -317,7 +331,7 @@ class FileOpsTest(unittest.TestCase):
 
     def test_lstat(self):
         sb = self.vol.lstat(self.path)
-        self.assertFalse(isinstance(sb, types.IntType))
+        self.assertFalse(isinstance(sb, int))
         self.assertEqual(sb.st_size, len(self.data))
 
     def test_rename(self):
@@ -333,7 +347,7 @@ class FileOpsTest(unittest.TestCase):
 
     def test_stat(self):
         sb = self.vol.stat(self.path)
-        self.assertFalse(isinstance(sb, types.IntType))
+        self.assertFalse(isinstance(sb, int))
         self.assertEqual(sb.st_size, len(self.data))
 
     def test_unlink(self):
@@ -461,14 +475,14 @@ class FileOpsTest(unittest.TestCase):
     def test_ftruncate(self):
         name = uuid4().hex
         with File(self.vol.open(name, os.O_WRONLY | os.O_CREAT)) as f:
-            f.write("123456789")
+            f.write(b"123456789")
             f.ftruncate(5)
             f.fsync()
         with File(self.vol.open(name, os.O_RDONLY)) as f:
             # The size should be reduced
             self.assertEqual(f.fgetsize(), 5)
             # So should be the content.
-            self.assertEqual(f.read(), "12345")
+            self.assertEqual(f.read(), b"12345")
 
     def test_fallocate(self):
         name = uuid4().hex
@@ -492,15 +506,15 @@ class FileOpsTest(unittest.TestCase):
     def test_zerofill(self):
         name = uuid4().hex
         with File(self.vol.open(name, os.O_RDWR | os.O_CREAT)) as f:
-            f.write('0123456789')
+            f.write(b'0123456789')
             f.fsync()
             self.assertEqual(f.fstat().st_size, 10)
             f.lseek(0, os.SEEK_SET)
-            self.assertEqual(f.read(), '0123456789')
+            self.assertEqual(f.read(), b'0123456789')
             f.zerofill(3, 6)
             f.lseek(0, os.SEEK_SET)
             data = f.read()
-            self.assertEqual(data, '012\x00\x00\x00\x00\x00\x009')
+            self.assertEqual(data, b'012\x00\x00\x00\x00\x00\x009')
             self.assertEqual(len(data), 10)
 
     def test_utime(self):
@@ -589,17 +603,20 @@ class FileOpsTest(unittest.TestCase):
     def test_readinto(self):
         file_name = uuid4().hex
         with File(self.vol.open(file_name, os.O_WRONLY | os.O_CREAT)) as f:
-            s = ''.join([str(i) for i in xrange(10)])
-            f.write(s)
+            s = ''.join([str(i) for i in range(10)])
+            f.write(bytearray(s, "ascii"))
             f.fsync()
 
         buf = bytearray(1)
         with File(self.vol.open(file_name, os.O_RDONLY)) as f:
-            for i in xrange(10):
+            for i in range(10):
                 # Read one character at a time into buf
                 f.readinto(buf)
                 self.assertEqual(len(buf), 1)
-                self.assertEqual(buf, bytearray(str(i)))
+                if PY3:
+                    self.assertEqual(buf, bytes(str(i), 'ascii'))
+                else:
+                    self.assertEqual(buf, bytearray(str(i)))
 
         with File(self.vol.open(file_name, os.O_RDONLY)) as f:
             self.assertRaises(TypeError, f.readinto, str("buf"))
@@ -622,7 +639,7 @@ class FileOpsTest(unittest.TestCase):
         # Create source file.
         src_file = uuid4().hex
         with self.vol.fopen(src_file, 'wb') as f:
-            for i in xrange(2):
+            for i in range(2):
                 f.write(os.urandom(128 * 1024))
             f.write(os.urandom(25 * 1024))
         # Change/set atime and mtime
@@ -697,11 +714,11 @@ class FileOpsTest(unittest.TestCase):
     def test_copymode(self):
         src_file = uuid4().hex
         self.vol.fopen(src_file, 'w').close()
-        self.vol.chmod(src_file, 0644)
+        self.vol.chmod(src_file, 0o644)
 
         dest_file = uuid4().hex
         self.vol.fopen(dest_file, 'w').close()
-        self.vol.chmod(dest_file, 0640)
+        self.vol.chmod(dest_file, 0o640)
 
         self.vol.copymode(src_file, dest_file)
         self.assertEqual(self.vol.stat(src_file).st_mode,
@@ -711,7 +728,7 @@ class FileOpsTest(unittest.TestCase):
         # Create source file and set mode, atime, mtime
         src_file = uuid4().hex
         self.vol.fopen(src_file, 'w').close()
-        self.vol.chmod(src_file, 0640)
+        self.vol.chmod(src_file, 0o640)
         (atime, mtime) = (692884800, 692884800)
         self.vol.utime(src_file, (atime, mtime))
 
@@ -733,7 +750,7 @@ class FileOpsTest(unittest.TestCase):
         # Create source file.
         src_file = uuid4().hex
         with self.vol.fopen(src_file, 'wb') as f:
-            for i in xrange(2):
+            for i in range(2):
                 f.write(os.urandom(128 * 1024))
             f.write(os.urandom(25 * 1024))
 
@@ -766,7 +783,7 @@ class FileOpsTest(unittest.TestCase):
         # Create source file.
         src_file = uuid4().hex
         with self.vol.fopen(src_file, 'wb') as f:
-            for i in xrange(2):
+            for i in range(2):
                 f.write(os.urandom(128 * 1024))
             f.write(os.urandom(25 * 1024))
         (atime, mtime) = (692884800, 692884800)
@@ -820,7 +837,7 @@ class DirOpsTest(unittest.TestCase):
         # Create a filesystem tree
         self.data = "gluster is awesome"
         self.dir_path = self._testMethodName + "_dir"
-        self.vol.mkdir(self.dir_path, 0755)
+        self.vol.mkdir(self.dir_path, 0o755)
         for x in range(0, 3):
             d = os.path.join(self.dir_path, 'testdir' + str(x))
             self.vol.mkdir(d)
@@ -926,16 +943,16 @@ class DirOpsTest(unittest.TestCase):
 
     def test_makedirs(self):
         name = self.dir_path + "/subd1/subd2/subd3"
-        self.vol.makedirs(name, 0755)
+        self.vol.makedirs(name, 0o755)
         self.assertTrue(self.vol.isdir(name))
 
     def test_statvfs(self):
         sb = self.vol.statvfs("/")
-        self.assertFalse(isinstance(sb, types.IntType))
-        self.assertEqual(sb.f_namemax, 255L)
+        self.assertFalse(isinstance(sb, int))
+        self.assertEqual(sb.f_namemax, 255)
         # creating a dir, checking Total number of free inodes
         # is reduced
-        self.vol.makedirs("statvfs_dir1", 0755)
+        self.vol.makedirs("statvfs_dir1", 0o755)
         sb2 = self.vol.statvfs("/")
         self.assertTrue(sb2.f_ffree < sb.f_ffree)
 
