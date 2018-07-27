@@ -1823,3 +1823,20 @@ class Volume(object):
 
         if errors:
             raise Error(errors)
+
+    @validate_mount
+    def mknod(self, path, mode, dev):
+        """
+        Create special or ordinary file; see mknod(2) for more details.
+
+        :param path: Path of file to be created.
+        :param mode: Operation to be performed on the given range
+        :param dev: Major and minor numbers for newly created device special
+                    file; use os.makedev to build value. Ignored for other
+                    types.
+        :raises: OSError on failure
+        """
+        ret = api.glfs_mknod(self.fs, decode_to_bytes(path), mode, dev)
+        if ret < 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err))

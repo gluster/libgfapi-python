@@ -1188,3 +1188,17 @@ class TestVolume(unittest.TestCase):
                          int(mtime))
         self.assertEqual(mock_glfs_utimens.call_args[0][2][1].tv_nsec,
                          int(math.modf(mtime)[0] * 1e9))
+
+    def test_mknod_success(self):
+        mock_glfs_mknod = Mock()
+        mock_glfs_mknod.return_value = 0
+
+        with patch("gluster.gfapi.api.glfs_mknod", mock_glfs_mknod):
+            self.vol.mknod("testdev", 0o644, os.makedev(1, 3))
+
+    def test_mknod_fail_exception(self):
+        mock_glfs_mknod = Mock()
+        mock_glfs_mknod.return_value = -1
+
+        with patch("gluster.gfapi.api.glfs_mknod", mock_glfs_mknod):
+            self.assertRaises(OSError, self.vol.mknod, "testdev", 0o644, 0)

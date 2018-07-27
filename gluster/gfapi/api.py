@@ -515,3 +515,9 @@ glfs_get_volumeid = gfapi_prototype('glfs_get_volumeid', ctypes.c_int,
                                     ctypes.c_void_p,
                                     ctypes.c_char_p,
                                     ctypes.c_size_t)
+
+glfs_mknod = gfapi_prototype('glfs_mknod', ctypes.c_int,
+                             ctypes.c_void_p,
+                             ctypes.c_char_p,
+                             ctypes.c_uint32,
+                             ctypes.c_uint32)

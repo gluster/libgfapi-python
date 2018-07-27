@@ -815,6 +815,13 @@ class FileOpsTest(unittest.TestCase):
         self.assertEqual(src_stat.st_mode, dest_stat.st_mode)
         self.assertEqual(src_stat.st_mtime, dest_stat.st_mtime)
 
+    def test_mknod(self):
+        self.vol.mknod("dev", stat.S_IFCHR | 0o644, os.makedev(1, 3))
+        st = self.vol.stat("dev")
+        self.assertTrue(stat.S_ISCHR(st.st_mode))
+        self.assertEqual(os.major(st.st_rdev), 1)
+        self.assertEqual(os.minor(st.st_rdev), 3)
+
 
 class DirOpsTest(unittest.TestCase):
 
