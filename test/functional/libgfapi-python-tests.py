@@ -1120,7 +1120,7 @@ class TestVolumeInit(unittest.TestCase):
         # Check attribute init
         self.assertEqual(vol.log_file, "/dev/null")
         self.assertEqual(vol.log_level, 7)
-        self.assertEqual(vol.host, HOST)
+        self.assertEqual(vol.hosts[0], HOST)
         self.assertEqual(vol.volname, VOLNAME)
         self.assertEqual(vol.port, 24007)
         self.assertFalse(vol.mounted)

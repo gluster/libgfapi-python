@@ -361,6 +361,7 @@ class TestVolume(unittest.TestCase):
     def test_initialization_error(self):
         self.assertRaises(LibgfapiException, Volume, "host", None)
         self.assertRaises(LibgfapiException, Volume, None, "vol")
+        self.assertRaises(LibgfapiException, Volume, [], "vol")
         self.assertRaises(LibgfapiException, Volume, None, None)
         self.assertRaises(LibgfapiException, Volume, "host", "vol", "ZZ")
         self.assertRaises(LibgfapiException, Volume, "host", "vol",
@@ -368,7 +369,7 @@ class TestVolume(unittest.TestCase):
 
     def test_initialization_success(self):
         v = Volume("host", "vol", "tcp", 9876)
-        self.assertEqual(v.host, "host")
+        self.assertEqual(v.hosts[0], "host")
         self.assertEqual(v.volname, "vol")
         self.assertEqual(v.protocol, "tcp")
         self.assertEqual(v.port, 9876)
@@ -414,7 +415,7 @@ class TestVolume(unittest.TestCase):
             self.assertFalse(v.mounted)
             _m_glfs_new.assert_called_once_with(b"vol")
             _m_set_vol.assert_called_once_with(v.fs, v.protocol.encode('utf-8'),
-                                               v.host.encode('utf-8'), v.port)
+                                               v.hosts[0].encode('utf-8'), v.port)
 
         # glfs_init() failed
         _m_glfs_init = Mock(return_value=-1)
@@ -423,6 +424,15 @@ class TestVolume(unittest.TestCase):
             self.assertRaises(LibgfapiException, v.mount)
             self.assertFalse(v.mounted)
             _m_glfs_init.assert_called_once_with(v.fs)
+
+    def test_mount_multiple_hosts(self):
+        _m_set_vol = Mock(return_value=0)
+        with patch("gluster.gfapi.api.glfs_set_volfile_server", _m_set_vol):
+            hosts = ["host1", "host2"]
+            v = Volume(hosts, "vol")
+            v.mount()
+            self.assertEqual(_m_set_vol.call_count, len(hosts))
+            v.umount()
 
     def test_umount_error(self):
         v = Volume("host", "vol")

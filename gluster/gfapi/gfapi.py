@@ -672,13 +672,14 @@ class DirEntry(object):
 
 class Volume(object):
 
-    def __init__(self, host, volname,
+    def __init__(self, hosts, volname,
                  proto="tcp", port=24007, log_file="/dev/null", log_level=7):
         """
         Create a Volume object instance.
 
-        :param host: Host with glusterd management daemon running OR
-        :            path to socket file which glusterd is listening on.
+        :param hosts: Host (string) or hosts (list of strings) with glusterd
+                      daemon running OR path to socket file which glusterd is
+                      listening on.
         :param volname: Name of GlusterFS volume to be mounted and used.
         :param proto: Transport protocol to be used to connect to management
                       daemon. Permitted values are "tcp" and "rdma".
@@ -704,15 +705,20 @@ class Volume(object):
         self.log_file = log_file
         self.log_level = log_level
 
-        if None in (volname, host):
-            # TODO: Validate host based on regex for IP/FQDN.
+        if None in (volname, hosts):
             raise LibgfapiException("Host and Volume name should not be None.")
         if proto not in ('tcp', 'rdma', 'unix'):
             raise LibgfapiException("Invalid protocol specified.")
         if not isinstance(port, int):
             raise LibgfapiException("Invalid port specified.")
 
-        self.host = host
+        if type(hosts) is not list:
+            hosts = [hosts]
+
+        if len(hosts) < 1:
+            raise LibgfapiException("At least one host must be specified")
+
+        self.hosts = hosts
         self.volname = volname
         self.volid = None
         self.protocol = proto
@@ -743,16 +749,18 @@ class Volume(object):
             raise LibgfapiException("glfs_new(%s) failed: %s" %
                                     (self.volname, os.strerror(err)))
 
-        ret = api.glfs_set_volfile_server(self.fs,
-                                          decode_to_bytes(self.protocol),
-                                          decode_to_bytes(self.host),
-                                          self.port)
-        if ret < 0:
-            err = ctypes.get_errno()
-            raise LibgfapiException("glfs_set_volfile_server(%s, %s, %s, "
-                                    "%s) failed: %s" % (self.fs, self.protocol,
-                                                        self.host, self.port,
-                                                        os.strerror(err)))
+        for host in self.hosts:
+            ret = api.glfs_set_volfile_server(self.fs,
+                                              decode_to_bytes(self.protocol),
+                                              decode_to_bytes(host),
+                                              self.port)
+            if ret < 0:
+                err = ctypes.get_errno()
+                raise LibgfapiException("glfs_set_volfile_server(%s, %s, %s, "
+                                        "%s) failed: %s" % (self.fs,
+                                                            self.protocol,
+                                                            host, self.port,
+                                                            os.strerror(err)))
 
         self.set_logging(self.log_file, self.log_level)
 
