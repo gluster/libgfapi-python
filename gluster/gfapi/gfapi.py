@@ -782,7 +782,7 @@ class Volume(object):
 
         :raises: LibgfapiException on failure
         """
-        if self.fs:
+        if self.fs and self._mounted:
             ret = self._api.glfs_fini(self.fs)
             if ret < 0:
                 err = ctypes.get_errno()
