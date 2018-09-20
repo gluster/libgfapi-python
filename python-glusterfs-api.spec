@@ -5,43 +5,75 @@
 # * The RPM package is named python-glusterfs-api to be analogous to
 #   glusterfs-api RPM which provides the libgfapi C library
 
-%global python_package_name gfapi
+%global src_repo_name libgfapi-python
+%global python_pkg_name gfapi
+%global pkg_name glusterfs-api
 
-Name:             python-glusterfs-api
+%if ( 0%{?fedora} && 0%{?fedora} > 26 ) || ( 0%{?rhel} && 0%{?rhel} > 7 )
+%global with_python3 1
+%endif
+
+%global _description \
+libgfapi is a library that allows applications to natively access \
+GlusterFS volumes. This package contains python bindings to libgfapi. \
+See https://libgfapi-python.rtfd.io/ for more details.
+
+Name:             python-%{pkg_name}
 Summary:          Python bindings for GlusterFS libgfapi
-Version:          1.1
+Version:          1.2
 Release:          1%{?dist}
 License:          GPLv2 or LGPLv3+
 Group:            System Environment/Libraries
 Vendor:           Gluster Community
-URL:              https://github.com/gluster/libgfapi-python
-Source0:          https://files.pythonhosted.org/packages/source/g/gfapi/%{python_package_name}-%{version}.tar.gz
-
+URL:              https://github.com/gluster/%{src_repo_name}
+Source0:          %pypi_source %{python_pkg_name} %{version}
 BuildArch:        noarch
-BuildRequires:    python-setuptools
 
-# Provides libgfapi.so
-Requires:         glusterfs-api >= 3.7.0
-# Provides gluster/__init__.py
-Requires:         python-gluster >= 3.7.0
+%description %{_description}
 
-%description
-libgfapi is a library that allows applications to natively access GlusterFS
-volumes. This package contains python bindings to libgfapi.
+# BEGIN python2 package section
+%package -n python2-%{pkg_name}
 
-See http://libgfapi-python.rtfd.io/ for more details.
+Summary:          %{summary}
+BuildRequires:    python2-setuptools
+Requires:         glusterfs-api >= 3.12.0
+Requires:         python2-gluster >= 3.12.0
+%{?python_provide:%python_provide python2-%{pkg_name}}
+
+%description -n python2-%{pkg_name} %{_description}
+# END python2 package section
+
+# BEGIN python3 package section
+%if 0%{?with_python3}
+%package -n python3-%{pkg_name}
+
+Summary:          %{summary}
+BuildRequires:    python3-setuptools
+Requires:         glusterfs-api >= 3.12.0
+Requires:         python3-gluster >= 3.12.0
+%{?python_provide:%python_provide python3-%{pkg_name}}
+
+
+%description -n python3-%{pkg_name} %{_description}
+%endif
+# END python3 package section
 
 %prep
-%setup -q -n %{python_package_name}-%{version}
+%autosetup -n %{python_pkg_name}-%{version} -S git
 
 %build
-%{__python2} setup.py build
+%py2_build
+%if 0%{?with_python3}
+%py3_build
+%endif
 
 %install
-rm -rf %{buildroot}
-%{__python2} setup.py install --skip-build --root %{buildroot}
+%py2_install
+%if 0%{?with_python3}
+%py3_install
+%endif
 
-%files
+%files -n python2-%{pkg_name}
 %doc README.rst
 %license COPYING-GPLV2 COPYING-LGPLV3
 %{python2_sitelib}/*
@@ -49,7 +81,24 @@ rm -rf %{buildroot}
 # it is provided by python-gluster package which is a dependency.
 %exclude %{python2_sitelib}/gluster/__init__*
 
+%if 0%{?with_python3}
+%files -n python3-%{pkg_name}
+%doc README.rst
+%license COPYING-GPLV2 COPYING-LGPLV3
+%{python3_sitelib}/*
+# As weird as it may seem, excluding __init__.py[co] is intentional as
+# it is provided by python-gluster package which is a dependency.
+%exclude %{python3_sitelib}/gluster/__init__*
+%endif
+
 %changelog
+* Wed Sep 19 2018 Prashanth Pai <ppai@redhat.com> - 1.2-0
+- Add Python 3.x support
+- Add mknod() and get_volume_id() APIs
+- Support setting multiple hosts (volfile servers)
+- Support mounting over unix domain socket
+- Disable client logging by default
+
 * Tue Aug 9 2016 Prashanth Pai <ppai@redhat.com> - 1.1-1
 - Update spec file
 
