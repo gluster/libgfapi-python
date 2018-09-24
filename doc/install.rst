@@ -5,7 +5,7 @@ Install libgfapi-python from yum/dnf repo:
 
 .. code-block:: console
 
-    $ sudo yum install python-glusterfs-api
+    $ sudo dnf install python-glusterfs-api
 
 OR
 
@@ -27,4 +27,4 @@ Install libgfapi-python from source:
 
 .. note::
     libgfapi-python bindings has been tested only against **Linux x86-64** and
-    Python versions **2.6** and **2.7**
+    Python versions **2.7** and **>=3.4**.
