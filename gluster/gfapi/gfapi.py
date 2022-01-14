@@ -18,7 +18,7 @@ import time
 import stat
 import errno
 import uuid
-from collections import Iterator
+from collections.abc import Iterator
 
 from gluster.gfapi import api
 from gluster.gfapi.exceptions import LibgfapiException, Error
