@@ -18,7 +18,12 @@ import time
 import stat
 import errno
 import uuid
-from collections import Iterator
+
+PY3_3 = sys.version_info >= (3, 3)
+if PY3_3:
+    from collections.abc import Iterator
+else:
+    from collections import Iterator
 
 from gluster.gfapi import api
 from gluster.gfapi.exceptions import LibgfapiException, Error
