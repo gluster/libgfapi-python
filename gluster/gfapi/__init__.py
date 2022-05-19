@@ -8,7 +8,7 @@
 # later), or the GNU General Public License, version 2 (GPLv2), in all
 # cases as published by the Free Software Foundation.
 
-__version__ = '1.2'
+__version__ = '1.3'
 
 from .gfapi import File, Dir, DirEntry, Volume
 __all__ = ['File', 'Dir', 'DirEntry', 'Volume']

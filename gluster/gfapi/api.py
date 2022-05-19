@@ -8,6 +8,7 @@
 # later), or the GNU General Public License, version 2 (GPLv2), in all
 # cases as published by the Free Software Foundation.
 
+import sys
 import ctypes
 from ctypes.util import find_library
 from ctypes import sizeof
@@ -105,14 +106,23 @@ class Statvfs (ctypes.Structure):
 
 
 class Dirent (ctypes.Structure):
-    _fields_ = [
-        ("d_ino", ctypes.c_ulong),
-        ("d_off", ctypes.c_ulong),
-        ("d_reclen", ctypes.c_ushort),
-        ("d_type", ctypes.c_char),
-        ("d_name", ctypes.c_char * 256),
-    ]
-
+    if sys.platform == 'darwin':
+        _fields_ = [
+            ("d_ino", ctypes.c_ulong),
+            ("d_off", ctypes.c_ulong),
+            ("d_reclen", ctypes.c_uint16),
+            ("d_namelen", ctypes.c_uint16),
+            ("d_type", ctypes.c_uint8),
+            ("d_name", ctypes.c_char * 256),
+        ]
+    else:
+        _fields_ = [
+            ("d_ino", ctypes.c_ulong),
+            ("d_off", ctypes.c_ulong),
+            ("d_reclen", ctypes.c_ushort),
+            ("d_type", ctypes.c_char),
+            ("d_name", ctypes.c_char * 256),
+        ]
 
 class Timespec (ctypes.Structure):
     _fields_ = [
