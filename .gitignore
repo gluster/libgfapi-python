@@ -8,3 +8,6 @@ pycscope.*
 build
 dist
 doc/_build
+.idea/
+publish.sh
+test/
