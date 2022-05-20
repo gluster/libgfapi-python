@@ -68,24 +68,54 @@ except ImportError:
 
 
 class Stat (ctypes.Structure):
-    _fields_ = [
-        ("st_dev", ctypes.c_ulong),
-        ("st_ino", ctypes.c_ulong),
-        ("st_nlink", ctypes.c_ulong),
-        ("st_mode", ctypes.c_uint),
-        ("st_uid", ctypes.c_uint),
-        ("st_gid", ctypes.c_uint),
-        ("st_rdev", ctypes.c_ulong),
-        ("st_size", ctypes.c_ulong),
-        ("st_blksize", ctypes.c_ulong),
-        ("st_blocks", ctypes.c_ulong),
-        ("st_atime", ctypes.c_ulong),
-        ("st_atimensec", ctypes.c_ulong),
-        ("st_mtime", ctypes.c_ulong),
-        ("st_mtimensec", ctypes.c_ulong),
-        ("st_ctime", ctypes.c_ulong),
-        ("st_ctimensec", ctypes.c_ulong),
-    ]
+    if sys.platform == 'darwin':
+        _fields_ = [
+            ("st_dev", ctypes.c_int32),
+            ("st_mode", ctypes.c_uint16),
+            ("st_ino", ctypes.c_uint32),
+            ("st_nlink", ctypes.c_uint16),
+            ("st_uid", ctypes.c_uint),
+            ("st_gid", ctypes.c_uint),
+            ("st_rdev", ctypes.c_uint32),
+
+            ("st_atime", ctypes.c_long),
+            ("st_atimensec", ctypes.c_long),
+            ("st_mtime", ctypes.c_long),
+            ("st_mtimensec", ctypes.c_long),
+            ("st_ctime", ctypes.c_long),
+            ("st_ctimensec", ctypes.c_long),
+            ("st_birthtime", ctypes.c_long),
+            ("st_birthtimespec", ctypes.c_long),
+
+            ("st_size", ctypes.c_int64),
+            ("st_blocks", ctypes.c_int64),
+            ("st_blksize", ctypes.c_int32),
+
+            ("st_flags", ctypes.c_uint32),
+            ("st_gen", ctypes.c_uint32),
+            ("st_lspare", ctypes.c_int32),
+            ("st_qspare1", ctypes.c_int64),
+            ("st_qspare2", ctypes.c_int64),
+        ]
+    else:
+        _fields_ = [
+            ("st_dev", ctypes.c_ulong),
+            ("st_ino", ctypes.c_ulong),
+            ("st_nlink", ctypes.c_ulong),
+            ("st_mode", ctypes.c_uint),
+            ("st_uid", ctypes.c_uint),
+            ("st_gid", ctypes.c_uint),
+            ("st_rdev", ctypes.c_ulong),
+            ("st_size", ctypes.c_ulong),
+            ("st_blksize", ctypes.c_ulong),
+            ("st_blocks", ctypes.c_ulong),
+            ("st_atime", ctypes.c_ulong),
+            ("st_atimensec", ctypes.c_ulong),
+            ("st_mtime", ctypes.c_ulong),
+            ("st_mtimensec", ctypes.c_ulong),
+            ("st_ctime", ctypes.c_ulong),
+            ("st_ctimensec", ctypes.c_ulong),
+        ]
 
 
 class Statvfs (ctypes.Structure):
